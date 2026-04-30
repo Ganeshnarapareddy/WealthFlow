@@ -1,0 +1,12 @@
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+*.db
+.gemini/
+.antigravity/
+scratch/
+.tempmediaStorage/
+.system_generated/
+walkthrough.md
+implementation_plan.md
+task.md
