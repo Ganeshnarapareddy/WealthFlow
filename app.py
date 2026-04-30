@@ -55,7 +55,6 @@ with st.sidebar:
 # --- PAGES ---
 
 if page == "Dashboard":
-    # Header row with currency switcher top-right
     h1, h2 = st.columns([3, 1])
     with h1:
         st.markdown('<h1 class="main-header">Command Center</h1>', unsafe_allow_html=True)
@@ -69,7 +68,6 @@ if page == "Dashboard":
             st.session_state['sym'] = sym_map[cur_label]
             st.rerun()
 
-    # Metrics
     net = FinanceService.get_net_worth()
     burn = RecurringService.get_monthly_recurring_total()
     inc, exp = FinanceService.get_monthly_income_vs_expense()
@@ -82,7 +80,6 @@ if page == "Dashboard":
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Advanced Analytics Tabs
     tab_spend, tab_flow, tab_wealth, tab_burn = st.tabs([
         "📊 Spending Mix", "📉 Cash Flow", "💰 Wealth Split", "🔥 Burn Rate"
     ])
@@ -135,76 +132,55 @@ if page == "Dashboard":
             empty_state("No Flow Data", "Income & expense data will appear here.")
 
     with tab_wealth:
-        # Split between Accounts and Assets
         acc_bal = net - AssetService.get_total_assets_value()
         ast_val = AssetService.get_total_assets_value()
-        
         fig3 = px.pie(values=[acc_bal, ast_val], names=['Liquid Cash', 'Invested Assets'],
                       color_discrete_sequence=['#3b82f6', '#8b5cf6'], hole=0.6)
         fig3.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                            font_color="#e2e8f0", margin=dict(t=10, b=10, l=0, r=0))
         st.plotly_chart(fig3, use_container_width=True)
-        st.markdown(f"<div style='text-align:center; color:#94a3b8;'>Total Liquidity: {fmt(acc_bal)}</div>", unsafe_allow_html=True)
 
     with tab_burn:
-        # Gauge chart for Burn Rate against total budget
         df_b = BudgetService.get_monthly_budgets()
         total_limit = df_b['Limit'].sum() if not df_b.empty else 0
-        total_spent = exp
-        
         if total_limit > 0:
             fig4 = go.Figure(go.Indicator(
                 mode = "gauge+number",
-                value = total_spent,
-                domain = {'x': [0, 1], 'y': [0, 1]},
-                title = {'text': "Monthly Budget Usage", 'font': {'size': 24, 'color': '#e2e8f0'}},
-                gauge = {
-                    'axis': {'range': [None, total_limit], 'tickwidth': 1, 'tickcolor': "#94a3b8"},
-                    'bar': {'color': "#3b82f6"},
-                    'bgcolor': "rgba(30, 41, 59, 0.4)",
-                    'borderwidth': 2,
-                    'bordercolor': "rgba(255, 255, 255, 0.1)",
-                    'steps': [
-                        {'range': [0, total_limit*0.8], 'color': 'rgba(74, 222, 128, 0.2)'},
-                        {'range': [total_limit*0.8, total_limit], 'color': 'rgba(239, 68, 68, 0.2)'}
-                    ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': total_limit
-                    }
-                }
+                value = exp,
+                gauge = {'axis': {'range': [None, total_limit]}, 'bar': {'color': "#3b82f6"}}
             ))
-            fig4.update_layout(paper_bgcolor='rgba(0,0,0,0)', font={'color': "#e2e8f0", 'family': "Outfit"})
+            fig4.update_layout(paper_bgcolor='rgba(0,0,0,0)', font={'color': "#e2e8f0"})
             st.plotly_chart(fig4, use_container_width=True)
         else:
-            empty_state("No Budgets Set", "Add budgets to track your burn rate gauge.")
+            empty_state("No Budgets", "Set budgets to see burn rate.")
 
 elif page == "Transactions":
     st.markdown('<h1 class="main-header">Ledger</h1>', unsafe_allow_html=True)
     t1, t2 = st.tabs(["➕ Add Entry", "📜 History"])
     
     with t1:
-        txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True)
+        # Use a simpler layout for the form to avoid React loops on mobile
         with st.form("add_txn_pro", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                amt = st.number_input("Amount", min_value=1.0, step=1.0)
-                dt = st.date_input("Date", value=datetime.now())
-                tm = st.time_input("Time", value=datetime.now().time())
-            with col2:
-                all_cats = FinanceService.get_categories()
-                filtered = all_cats[all_cats['type'] == txn_type]
-                cat_opts = {f"{r['icon']} {r['name']}": r['id'] for _, r in filtered.iterrows()}
-                cat_sel = st.selectbox("Category", list(cat_opts.keys()) if cat_opts else ["-"])
-                desc = st.text_input("Description", placeholder="What was this for?")
+            txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True)
+            amt = st.number_input("Amount", min_value=0.0, step=1.0)
+            
+            # Use columns only if not on a very small screen (Streamlit handles this, but let's be safe)
+            c1, c2 = st.columns(2)
+            with c1: dt = st.date_input("Date", value=datetime.now())
+            with c2: tm = st.time_input("Time", value=datetime.now().time())
+            
+            all_cats = FinanceService.get_categories()
+            filtered = all_cats[all_cats['type'] == txn_type]
+            cat_opts = {f"{r['icon']} {r['name']}": r['id'] for _, r in filtered.iterrows()}
+            cat_sel = st.selectbox("Category", list(cat_opts.keys()) if cat_opts else ["-"])
+            desc = st.text_input("Description", placeholder="What was this for?")
             
             if st.form_submit_button("Record Transaction", use_container_width=True):
                 if cat_sel != "-":
                     full_dt = datetime.combine(dt, tm)
                     FinanceService.add_transaction(amt, cat_opts[cat_sel], desc, full_dt, txn_type)
                     st.success("Transaction Logged!")
-                    st.rerun()
+                    # No st.rerun() here - let the form submission handle the refresh
 
     with t2:
         df_hist = FinanceService.get_recent_transactions(100)
@@ -217,29 +193,25 @@ elif page == "Transactions":
 
 elif page == "Budgets":
     st.markdown('<h1 class="main-header">Guardrails</h1>', unsafe_allow_html=True)
-    
-    with st.expander("➕ Set New Budget", expanded=False):
+    with st.expander("➕ Set New Budget"):
         with st.form("new_budget"):
             all_cats = FinanceService.get_categories()
             exp_cats = all_cats[all_cats['type'] == 'Expense']
             cat_opts = {f"{r['icon']} {r['name']}": r['id'] for _, r in exp_cats.iterrows()}
             sel_cat = st.selectbox("Category", list(cat_opts.keys()))
-            limit = st.number_input("Monthly Limit", min_value=1.0, step=100.0)
-            if st.form_submit_button("Lock Budget", use_container_width=True):
+            limit = st.number_input("Monthly Limit", min_value=1.0)
+            if st.form_submit_button("Lock Budget"):
                 BudgetService.add_budget(cat_opts[sel_cat], limit, datetime.now().month, datetime.now().year)
                 st.rerun()
                 
-    section_header("Active Budgets")
     df_b = BudgetService.get_monthly_budgets()
     if not df_b.empty:
         for _, row in df_b.iterrows():
             c1, c2 = st.columns([4, 1])
             with c1:
                 st.markdown(f"**{row['Category']}**")
-                color = "#3b82f6"
-                if row['Progress'] >= 1.0: color = "#ef4444"
-                elif row['Progress'] >= 0.8: color = "#f59e0b"
-                st.markdown(f'<div style="width:100%; background:rgba(255,255,255,0.1); height:8px; border-radius:4px;"><div style="width:{row["Progress"]*100}%; background:{color}; height:8px; border-radius:4px;"></div></div>', unsafe_allow_html=True)
+                prog = min(1.0, row['Progress'])
+                st.progress(prog)
                 st.caption(f"{fmt(row['Spent'])} of {fmt(row['Limit'])}")
             with c2:
                 if st.button("🗑️", key=f"del_{row['id']}"):
@@ -250,19 +222,14 @@ elif page == "Budgets":
 
 elif page == "Subscriptions":
     st.markdown('<h1 class="main-header">Recurring Bills</h1>', unsafe_allow_html=True)
-    
-    with st.expander("➕ Add Subscription", expanded=False):
+    with st.expander("➕ Add Subscription"):
         with st.form("new_sub"):
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                name = st.text_input("Service Name")
-                cost = st.number_input("Amount", min_value=1.0, step=1.0)
-            with col2:
-                icon = st.text_input("Emoji Icon", value="💳")
-                cycle = st.selectbox("Billing Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly"])
-            
+            name = st.text_input("Service Name")
+            cost = st.number_input("Amount", min_value=0.0)
+            icon = st.text_input("Emoji Icon", value="💳")
+            cycle = st.selectbox("Billing Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly"])
             start = st.date_input("Start Date")
-            if st.form_submit_button("Track Bill", use_container_width=True):
+            if st.form_submit_button("Track Bill"):
                 RecurringService.add_subscription(name, cost, cycle, start, icon)
                 st.rerun()
                 
@@ -272,7 +239,7 @@ elif page == "Subscriptions":
             c1, c2, c3 = st.columns([3, 2, 1])
             with c1:
                 st.markdown(f"**{row['Icon']} {row['Name']}**")
-                st.caption(f"{row['Cycle']} • {row['Category']}")
+                st.caption(f"{row['Cycle']}")
             with c2:
                 st.markdown(f"**{fmt(row['Amount'])}**")
                 st.caption(f"Next: {row['Next Date']}")
@@ -281,86 +248,68 @@ elif page == "Subscriptions":
                     RecurringService.delete_subscription(row['id'])
                     st.rerun()
             st.divider()
-    else:
-        empty_state("No Bills", "Track your recurring services here.")
 
 elif page == "Goals":
     st.markdown('<h1 class="main-header">Piggy Bank</h1>', unsafe_allow_html=True)
-    
-    with st.expander("➕ Create New Goal", expanded=False):
+    with st.expander("➕ Create New Goal"):
         with st.form("new_goal"):
             gname = st.text_input("What are we saving for?")
-            target = st.number_input("Target Amount", min_value=1.0, step=100.0)
+            target = st.number_input("Target Amount", min_value=1.0)
             deadline = st.date_input("Target Date")
-            icon = st.text_input("Custom Emoji Logo", value="🎯")
-            if st.form_submit_button("Create Goal", use_container_width=True):
+            icon = st.text_input("Emoji Logo", value="🎯")
+            if st.form_submit_button("Create Goal"):
                 GoalService.add_goal(gname, target, deadline, icon)
                 st.rerun()
                 
     df_g = GoalService.get_goals()
     if not df_g.empty:
         for _, row in df_g.iterrows():
-            with st.container():
-                st.markdown(f"### {row['Icon']} {row['Name']}")
-                prog = min(1.0, row['Current'] / row['Target']) if row['Target'] > 0 else 0
-                st.progress(prog)
-                st.write(f"Saved: **{fmt(row['Current'])}** / {fmt(row['Target'])}")
-                st.caption(f"Deadline: {row['Deadline']}")
-                
-                gc1, gc2, gc3 = st.columns([2, 1, 1])
-                with gc1: add_val = st.number_input("Add Amount", min_value=1.0, step=10.0, key=f"add_{row['id']}")
-                with gc2: 
-                    if st.button("💰 Save", key=f"btn_{row['id']}", use_container_width=True):
-                        GoalService.contribute(row['id'], add_val)
-                        st.rerun()
-                with gc3:
-                    if st.button("🗑️", key=f"gdel_{row['id']}", use_container_width=True):
-                        GoalService.delete_goal(row['id'])
-                        st.rerun()
-                st.divider()
-    else:
-        empty_state("No Goals", "Set a goal and start saving today.")
+            st.markdown(f"### {row['Icon']} {row['Name']}")
+            prog = min(1.0, row['Current'] / row['Target']) if row['Target'] > 0 else 0
+            st.progress(prog)
+            st.write(f"Saved: **{fmt(row['Current'])}** / {fmt(row['Target'])}")
+            
+            gc1, gc2, gc3 = st.columns([2, 1, 1])
+            with gc1: add_val = st.number_input("Add", min_value=0.0, key=f"add_{row['id']}")
+            with gc2: 
+                if st.button("💰 Save", key=f"btn_{row['id']}"):
+                    GoalService.contribute(row['id'], add_val)
+                    st.rerun()
+            with gc3:
+                if st.button("🗑️", key=f"gdel_{row['id']}"):
+                    GoalService.delete_goal(row['id'])
+                    st.rerun()
+            st.divider()
 
 elif page == "Assets":
     st.markdown('<h1 class="main-header">Wealth Portfolio</h1>', unsafe_allow_html=True)
-    
-    # Toggle between Add and Edit
     if st.session_state['edit_asset_id']:
         df_a = AssetService.get_assets()
         asset_to_edit = df_a[df_a['id'] == st.session_state['edit_asset_id']].iloc[0]
-        
-        with st.expander(f"📝 Editing {asset_to_edit['Name']}", expanded=True):
-            with st.form("edit_asset_form"):
-                en_name = st.text_input("Name", value=asset_to_edit['Name'])
-                en_type = st.selectbox("Type", ["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "Other"], 
-                                      index=["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "Other"].index(asset_to_edit['Type']))
-                en_val = st.number_input("Value", min_value=1.0, value=float(asset_to_edit['Value']))
-                
-                ec1, ec2 = st.columns(2)
-                with ec1:
-                    if st.form_submit_button("Update Asset", use_container_width=True):
-                        AssetService.update_asset(st.session_state['edit_asset_id'], en_name, en_type, en_val)
-                        st.session_state['edit_asset_id'] = None
-                        st.rerun()
-                with ec2:
-                    if st.form_submit_button("Cancel", use_container_width=True):
-                        st.session_state['edit_asset_id'] = None
-                        st.rerun()
+        with st.form("edit_asset_form"):
+            en_name = st.text_input("Name", value=asset_to_edit['Name'])
+            en_type = st.selectbox("Type", ["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "Other"], 
+                                  index=["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "Other"].index(asset_to_edit['Type']))
+            en_val = st.number_input("Value", min_value=0.0, value=float(asset_to_edit['Value']))
+            if st.form_submit_button("Update Asset"):
+                AssetService.update_asset(st.session_state['edit_asset_id'], en_name, en_type, en_val)
+                st.session_state['edit_asset_id'] = None
+                st.rerun()
+            if st.form_submit_button("Cancel"):
+                st.session_state['edit_asset_id'] = None
+                st.rerun()
     else:
-        with st.expander("➕ Add Asset", expanded=False):
+        with st.expander("➕ Add Asset"):
             with st.form("new_asset"):
-                aname = st.text_input("Asset Name (e.g. BTC, VOO)")
+                aname = st.text_input("Asset Name")
                 atype = st.selectbox("Type", ["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "Other"])
-                aval = st.number_input("Current Value", min_value=1.0, step=100.0)
-                if st.form_submit_button("Add Asset", use_container_width=True):
+                aval = st.number_input("Current Value", min_value=0.0)
+                if st.form_submit_button("Add Asset"):
                     AssetService.add_asset(aname, atype, aval)
                     st.rerun()
                 
     df_a = AssetService.get_assets()
     if not df_a.empty:
-        total_a = df_a['Value'].sum()
-        st.metric("Total Portfolio Value", fmt(total_a))
-        st.divider()
         for _, row in df_a.iterrows():
             ac1, ac2, ac3, ac4 = st.columns([3, 2, 1, 1])
             with ac1:
@@ -377,15 +326,11 @@ elif page == "Assets":
                     AssetService.delete_asset(row['id'])
                     st.rerun()
             st.divider()
-    else:
-        empty_state("No Assets", "Track your long-term investments here.")
 
 elif page == "Settings":
     st.markdown('<h1 class="main-header">Preferences</h1>', unsafe_allow_html=True)
-    section_header("Currency Setting")
     cur_opts = {"INR (₹)": "₹", "USD ($)": "$", "EUR (€)": "€", "GBP (£)": "£"}
     sel_cur = st.selectbox("Preferred Symbol", list(cur_opts.keys()), index=list(cur_opts.values()).index(st.session_state['sym']))
-    if st.button("Save Settings", use_container_width=True):
+    if st.button("Save Settings"):
         st.session_state['sym'] = cur_opts[sel_cur]
-        st.success("Settings Saved!")
         st.rerun()
