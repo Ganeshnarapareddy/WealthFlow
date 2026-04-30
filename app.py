@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import streamlit.components.v1 as components
 
 # Import Services
 from database import db
@@ -29,110 +28,91 @@ st.set_page_config(
 if 'sym' not in st.session_state: st.session_state['sym'] = '₹'
 if 'edit_asset_id' not in st.session_state: st.session_state['edit_asset_id'] = None
 if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
+if 'show_menu' not in st.session_state: st.session_state['show_menu'] = False
 
 apply_styles()
 
-# --- CUSTOM SIDEBAR LOGIC (THE "TAG" SYSTEM) ---
-# 1. Hide the default Streamlit chevron with CSS
-# 2. Add a custom floating 'Tag' button
+# --- HIDE DEFAULT SIDEBAR & HEADER ---
 st.markdown("""
     <style>
-    /* Hide the default sidebar toggle */
-    [data-testid="stSidebarNav"] {display: none;}
-    button[kind="header"] { display: none !important; }
-    
-    /* Custom Floating Tag Button */
-    #nav-tag {
-        position: fixed;
-        top: 20px;
-        left: 0;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        color: white;
-        padding: 10px 15px 10px 10px;
-        border-radius: 0 10px 10px 0;
-        cursor: pointer;
-        z-index: 999999;
-        font-weight: 800;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
-        transition: all 0.3s ease;
+    /* Hide the built-in sidebar and header chevron entirely */
+    [data-testid="stSidebar"], [data-testid="stSidebarNav"], button[kind="header"] {
+        display: none !important;
     }
-    #nav-tag:hover {
-        padding-right: 25px;
+    
+    /* Style for the Native Streamlit MENU button to look like a Tag */
+    .stButton > button[key="tag_btn"] {
+        position: fixed !important;
+        top: 25px !important;
+        left: 0 !important;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+        color: white !important;
+        border-radius: 0 12px 12px 0 !important;
+        width: 100px !important;
+        height: 45px !important;
+        z-index: 1000 !important;
+        border: none !important;
+        font-weight: 800 !important;
+        box-shadow: 4px 4px 15px rgba(0,0,0,0.4) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stButton > button[key="tag_btn"]:hover {
+        width: 115px !important;
+        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%) !important;
+    }
+
+    /* Padding for the main content so it doesn't hide behind the tag */
+    .main .block-container {
+        padding-top: 5rem !important;
     }
     </style>
-    
-    <div id="nav-tag" onclick="window.parent.document.querySelector('button[kind=\\'header\\']').click();">
-        💎 MENU
-    </div>
 """, unsafe_allow_html=True)
 
-# JS to handle auto-collapse when a page is selected
-components.html(
-    """
-    <script>
-    // Listen for changes and close sidebar if it's open on mobile
-    const parentDoc = window.parent.document;
+# Function to handle navigation
+def nav_to(p):
+    st.session_state['page'] = p
+    st.session_state['show_menu'] = False
+    st.rerun()
+
+# --- CUSTOM MENU TAG (NATIVE) ---
+if not st.session_state['show_menu']:
+    # We use a button with a specific key to target it with CSS
+    if st.button("💎 MENU", key="tag_btn"):
+        st.session_state['show_menu'] = True
+        st.rerun()
+
+# --- OVERLAY MENU ---
+if st.session_state['show_menu']:
+    # Render the menu as a full-page overlay using columns for centering
+    st.markdown("<h1 style='text-align:center; color:white; font-size:3.5rem; margin-top:10vh; margin-bottom:3rem;'>💎 WealthFlow</h1>", unsafe_allow_html=True)
     
-    // Function to close sidebar
-    function closeSidebar() {
-        const sidebar = parentDoc.querySelector('[data-testid="stSidebar"]');
-        const closeButton = parentDoc.querySelector('button[aria-label="Close"]');
-        if (sidebar && closeButton && window.getComputedStyle(sidebar).width !== '0px') {
-            closeButton.click();
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        pages = {
+            "Dashboard": "📊 Dashboard",
+            "Transactions": "💸 Transactions",
+            "Budgets": "🎯 Budgets",
+            "Subscriptions": "💳 Subscriptions",
+            "Goals": "🐷 Goals",
+            "Assets": "📈 Assets",
+            "Settings": "⚙️ Settings"
         }
-    }
-    
-    // Detect clicks on sidebar buttons (our nav buttons)
-    // We add a listener to the whole sidebar
-    setTimeout(() => {
-        const sidebar = parentDoc.querySelector('[data-testid="stSidebar"]');
-        if (sidebar) {
-            sidebar.addEventListener('click', (e) => {
-                // If it's a button, close the sidebar after a tiny delay
-                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-                    setTimeout(closeSidebar, 300);
-                }
-            });
-        }
-    }, 1000);
-    </script>
-    """,
-    height=0,
-)
+        
+        for p_id, p_label in pages.items():
+            if st.button(p_label, key=f"ov_{p_id}", use_container_width=True):
+                nav_to(p_id)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("✕ Close Menu", key="close_ov", use_container_width=True):
+            st.session_state['show_menu'] = False
+            st.rerun()
+    st.stop()
+
+# --- PAGE CONTENT ---
 
 def fmt(val):
     return f"{st.session_state['sym']}{val:,.2f}"
-
-# --- SIDEBAR ---
-with st.sidebar:
-    st.markdown("<h1 style='margin:0; color:white; font-weight:800; font-size:2.2rem;'>💎 WealthFlow</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #94a3b8; font-size: 0.9rem; margin-bottom:0;'>Smart Personal Finance</p>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #64748b; font-size: 0.75rem; font-style: italic;'>made by Ganesh Narapareddy</p>", unsafe_allow_html=True)
-    
-    st.divider()
-    
-    pages = {
-        "Dashboard": "📊 Dashboard",
-        "Transactions": "💸 Transactions",
-        "Budgets": "🎯 Budgets",
-        "Subscriptions": "💳 Subscriptions",
-        "Goals": "🐷 Goals",
-        "Assets": "📈 Assets",
-        "Settings": "⚙️ Settings"
-    }
-    
-    for p_id, p_label in pages.items():
-        is_active = st.session_state['page'] == p_id
-        if st.button(p_label, key=f"nav_{p_id}", use_container_width=True, type="primary" if is_active else "secondary"):
-            st.session_state['page'] = p_id
-            st.rerun()
-    
-    st.divider()
-    if st.button("🔄 Hard Reset Cache", use_container_width=True):
-        st.cache_resource.clear()
-        st.rerun()
-
-# --- PAGES ---
 
 page = st.session_state['page']
 
