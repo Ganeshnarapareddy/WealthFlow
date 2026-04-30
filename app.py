@@ -29,41 +29,79 @@ st.set_page_config(
 if 'sym' not in st.session_state: st.session_state['sym'] = '₹'
 if 'edit_asset_id' not in st.session_state: st.session_state['edit_asset_id'] = None
 if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
-if 'nav_trigger' not in st.session_state: st.session_state['nav_trigger'] = False
 
 apply_styles()
 
-# Advanced JS Hack for Sidebar Collapse
-# This targets the actual button element in the parent DOM
-if st.session_state['nav_trigger']:
-    components.html(
-        """
-        <script>
-            setTimeout(() => {
-                const parentDoc = window.parent.document;
-                // Target the 'X' button in the sidebar overlay on mobile
-                const buttons = parentDoc.querySelectorAll('button');
-                for (const btn of buttons) {
-                    const label = btn.getAttribute('aria-label');
-                    if (label === 'Close' || btn.innerText === '✕') {
-                        btn.click();
-                        break;
-                    }
+# --- CUSTOM SIDEBAR LOGIC (THE "TAG" SYSTEM) ---
+# 1. Hide the default Streamlit chevron with CSS
+# 2. Add a custom floating 'Tag' button
+st.markdown("""
+    <style>
+    /* Hide the default sidebar toggle */
+    [data-testid="stSidebarNav"] {display: none;}
+    button[kind="header"] { display: none !important; }
+    
+    /* Custom Floating Tag Button */
+    #nav-tag {
+        position: fixed;
+        top: 20px;
+        left: 0;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        padding: 10px 15px 10px 10px;
+        border-radius: 0 10px 10px 0;
+        cursor: pointer;
+        z-index: 999999;
+        font-weight: 800;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+        transition: all 0.3s ease;
+    }
+    #nav-tag:hover {
+        padding-right: 25px;
+    }
+    </style>
+    
+    <div id="nav-tag" onclick="window.parent.document.querySelector('button[kind=\\'header\\']').click();">
+        💎 MENU
+    </div>
+""", unsafe_allow_html=True)
+
+# JS to handle auto-collapse when a page is selected
+components.html(
+    """
+    <script>
+    // Listen for changes and close sidebar if it's open on mobile
+    const parentDoc = window.parent.document;
+    
+    // Function to close sidebar
+    function closeSidebar() {
+        const sidebar = parentDoc.querySelector('[data-testid="stSidebar"]');
+        const closeButton = parentDoc.querySelector('button[aria-label="Close"]');
+        if (sidebar && closeButton && window.getComputedStyle(sidebar).width !== '0px') {
+            closeButton.click();
+        }
+    }
+    
+    // Detect clicks on sidebar buttons (our nav buttons)
+    // We add a listener to the whole sidebar
+    setTimeout(() => {
+        const sidebar = parentDoc.querySelector('[data-testid="stSidebar"]');
+        if (sidebar) {
+            sidebar.addEventListener('click', (e) => {
+                // If it's a button, close the sidebar after a tiny delay
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                    setTimeout(closeSidebar, 300);
                 }
-            }, 100);
-        </script>
-        """,
-        height=0,
-    )
-    st.session_state['nav_trigger'] = False
+            });
+        }
+    }, 1000);
+    </script>
+    """,
+    height=0,
+)
 
 def fmt(val):
     return f"{st.session_state['sym']}{val:,.2f}"
-
-def navigate(p):
-    st.session_state['page'] = p
-    st.session_state['nav_trigger'] = True
-    st.rerun()
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -86,7 +124,8 @@ with st.sidebar:
     for p_id, p_label in pages.items():
         is_active = st.session_state['page'] == p_id
         if st.button(p_label, key=f"nav_{p_id}", use_container_width=True, type="primary" if is_active else "secondary"):
-            navigate(p_id)
+            st.session_state['page'] = p_id
+            st.rerun()
     
     st.divider()
     if st.button("🔄 Hard Reset Cache", use_container_width=True):
@@ -164,16 +203,13 @@ elif page == "Transactions":
             txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True)
             amt = st.number_input("Amount", min_value=0.0, step=1.0)
             dt = st.date_input("Date", value=datetime.now().date())
-            
             all_cats = FinanceService.get_categories()
             filtered = all_cats[all_cats['type'] == txn_type]
             cat_opts = {f"{r['icon']} {r['name']}": r['id'] for _, r in filtered.iterrows()}
             cat_sel = st.selectbox("Category", list(cat_opts.keys()) if cat_opts else ["-"])
             desc = st.text_input("Description", placeholder="What was this for?")
-            
             if st.form_submit_button("Record Transaction", use_container_width=True):
                 if cat_sel != "-":
-                    # Capture current time automatically for the logs
                     full_dt = datetime.combine(dt, datetime.now().time())
                     FinanceService.add_transaction(amt, cat_opts[cat_sel], desc, full_dt, txn_type)
                     st.success("Transaction Logged!")
