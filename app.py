@@ -193,8 +193,8 @@ elif page == "Transactions":
     t1, t2 = st.tabs(["➕ Add Entry", "📜 History"])
     
     with t1:
+        txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True, key="txn_type_toggle")
         with st.form("add_txn_pro", clear_on_submit=True):
-            txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True)
             amt = st.number_input("Amount", min_value=0.0, step=1.0)
             dt = st.date_input("Date", value=datetime.now().date())
             all_cats = FinanceService.get_categories()

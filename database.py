@@ -65,25 +65,25 @@ class TursoManager:
         # Migration for icon in subscriptions
         self.execute("ALTER TABLE subscriptions ADD COLUMN icon TEXT DEFAULT '💳'")
             
-        # Seed Categories
-        res = self.execute("SELECT COUNT(*) FROM categories")
-        if res and res.rows[0][0] == 0:
-            cats = [
-                ("1", "Housing", "Expense", "🏠"), ("2", "Food", "Expense", "🍱"),
-                ("3", "Transport", "Expense", "🚗"), ("4", "Entertainment", "Expense", "🎬"),
-                ("5", "Healthcare", "Expense", "🏥"), ("6", "Utilities", "Expense", "⚡"),
-                ("7", "Shopping", "Expense", "🛍️"), ("8", "Education", "Expense", "🎓"),
-                ("9", "Tuition Fees", "Expense", "📚"), ("10", "Wellness", "Expense", "🧘"),
-                ("11", "Travel", "Expense", "✈️"), ("12", "Insurance", "Expense", "🛡️"),
-                ("13", "Maintenance", "Expense", "🔧"), ("14", "Subscriptions", "Expense", "💳"),
-                ("15", "Charity", "Expense", "🤝"), ("16", "Personal Care", "Expense", "🧴"),
-                ("17", "Bills", "Expense", "🧾"), ("18", "Others", "Expense", "📁"),
-                ("19", "Salary", "Income", "💰"), ("20", "Investment", "Income", "📈"),
-                ("21", "Gifts", "Income", "🎁"), ("22", "Freelance", "Income", "💻"),
-                ("23", "Bonus", "Income", "🌟"), ("24", "Dividends", "Income", "🎟️")
-            ]
-            for c in cats:
-                self.execute("INSERT OR REPLACE INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)", c)
+        # Seed/Update Categories
+        cats = [
+            ("1", "Housing", "Expense", "🏠"), ("2", "Food", "Expense", "🍱"),
+            ("3", "Transport", "Expense", "🚗"), ("4", "Entertainment", "Expense", "🎬"),
+            ("5", "Healthcare", "Expense", "🏥"), ("6", "Utilities", "Expense", "⚡"),
+            ("7", "Shopping", "Expense", "🛍️"), ("8", "Education", "Expense", "🎓"),
+            ("9", "Tuition Fees", "Expense", "📚"), ("10", "Wellness", "Expense", "🧘"),
+            ("11", "Travel", "Expense", "✈️"), ("12", "Insurance", "Expense", "🛡️"),
+            ("13", "Maintenance", "Expense", "🔧"), ("14", "Subscriptions", "Expense", "💳"),
+            ("15", "Charity", "Expense", "🤝"), ("16", "Personal Care", "Expense", "🧴"),
+            ("17", "Bills", "Expense", "🧾"), ("18", "Others", "Expense", "📁"),
+            ("19", "Salary", "Income", "💰"), ("20", "Investment", "Income", "📈"),
+            ("21", "Gifts", "Income", "🎁"), ("22", "Freelance", "Income", "💻"),
+            ("23", "Bonus", "Income", "🌟"), ("24", "Dividends", "Income", "🎟️"),
+            ("25", "Rental", "Income", "🏠"), ("26", "Business", "Income", "💼"),
+            ("27", "Rebate", "Income", "💸"), ("28", "Other Income", "Income", "💰")
+        ]
+        for c in cats:
+            self.execute("INSERT OR REPLACE INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)", c)
 
         # Ensure default account
         res = self.execute("SELECT COUNT(*) FROM accounts")
@@ -94,9 +94,9 @@ class TursoManager:
             )
 
 @st.cache_resource
-def get_db_instance():
+def get_db_instance(v=2):
     manager = TursoManager()
     manager.initialize_schema()
     return manager
 
-db = get_db_instance()
+db = get_db_instance(v=2)
