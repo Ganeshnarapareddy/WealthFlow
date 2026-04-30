@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import streamlit.components.v1 as components
 
 # Import Services
 from database import db
@@ -21,24 +22,47 @@ st.set_page_config(
     page_title="WealthFlow Pro",
     page_icon="💎",
     layout="wide",
-    initial_sidebar_state="collapsed" # Default to collapsed for mobile
+    initial_sidebar_state="collapsed"
 )
 
 # Initialize Session State
 if 'sym' not in st.session_state: st.session_state['sym'] = '₹'
 if 'edit_asset_id' not in st.session_state: st.session_state['edit_asset_id'] = None
 if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
-if 'init_time' not in st.session_state: st.session_state['init_time'] = datetime.now().time()
-if 'init_date' not in st.session_state: st.session_state['init_date'] = datetime.now().date()
+if 'nav_trigger' not in st.session_state: st.session_state['nav_trigger'] = False
 
 apply_styles()
+
+# Advanced JS Hack for Sidebar Collapse
+# This targets the actual button element in the parent DOM
+if st.session_state['nav_trigger']:
+    components.html(
+        """
+        <script>
+            setTimeout(() => {
+                const parentDoc = window.parent.document;
+                // Target the 'X' button in the sidebar overlay on mobile
+                const buttons = parentDoc.querySelectorAll('button');
+                for (const btn of buttons) {
+                    const label = btn.getAttribute('aria-label');
+                    if (label === 'Close' || btn.innerText === '✕') {
+                        btn.click();
+                        break;
+                    }
+                }
+            }, 100);
+        </script>
+        """,
+        height=0,
+    )
+    st.session_state['nav_trigger'] = False
 
 def fmt(val):
     return f"{st.session_state['sym']}{val:,.2f}"
 
 def navigate(p):
     st.session_state['page'] = p
-    # On mobile, a rerun with initial_sidebar_state="collapsed" usually helps
+    st.session_state['nav_trigger'] = True
     st.rerun()
 
 # --- SIDEBAR ---
@@ -49,7 +73,6 @@ with st.sidebar:
     
     st.divider()
     
-    # Custom Navigation Buttons
     pages = {
         "Dashboard": "📊 Dashboard",
         "Transactions": "💸 Transactions",
@@ -61,7 +84,6 @@ with st.sidebar:
     }
     
     for p_id, p_label in pages.items():
-        # Highlight active page button
         is_active = st.session_state['page'] == p_id
         if st.button(p_label, key=f"nav_{p_id}", use_container_width=True, type="primary" if is_active else "secondary"):
             navigate(p_id)
@@ -141,12 +163,7 @@ elif page == "Transactions":
         with st.form("add_txn_pro", clear_on_submit=True):
             txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True)
             amt = st.number_input("Amount", min_value=0.0, step=1.0)
-            
-            # Use stable default values for time/date to avoid re-render loops on mobile
-            dt = st.date_input("Date", value=st.session_state['init_date'])
-            # Using a text input or a simpler time selector if the time_input crashes
-            # But let's try a stable key first
-            tm = st.time_input("Time", value=st.session_state['init_time'], key="txn_time_widget")
+            dt = st.date_input("Date", value=datetime.now().date())
             
             all_cats = FinanceService.get_categories()
             filtered = all_cats[all_cats['type'] == txn_type]
@@ -156,12 +173,10 @@ elif page == "Transactions":
             
             if st.form_submit_button("Record Transaction", use_container_width=True):
                 if cat_sel != "-":
-                    full_dt = datetime.combine(dt, tm)
+                    # Capture current time automatically for the logs
+                    full_dt = datetime.combine(dt, datetime.now().time())
                     FinanceService.add_transaction(amt, cat_opts[cat_sel], desc, full_dt, txn_type)
                     st.success("Transaction Logged!")
-                    # Force update init values for next time
-                    st.session_state['init_time'] = datetime.now().time()
-                    st.session_state['init_date'] = datetime.now().date()
 
     with t2:
         df_hist = FinanceService.get_recent_transactions(100)
