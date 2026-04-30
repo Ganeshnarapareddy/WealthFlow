@@ -35,34 +35,20 @@ apply_styles()
 # --- HIDE DEFAULT SIDEBAR & HEADER ---
 st.markdown("""
     <style>
-    /* Hide the built-in sidebar and header chevron entirely */
     [data-testid="stSidebar"], [data-testid="stSidebarNav"], button[kind="header"] {
         display: none !important;
     }
     
-    /* Style for the Native Streamlit MENU button to look like a Tag */
-    .stButton > button[key="tag_btn"] {
-        position: fixed !important;
-        top: 25px !important;
-        left: 0 !important;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-        color: white !important;
-        border-radius: 0 12px 12px 0 !important;
-        width: 100px !important;
-        height: 45px !important;
-        z-index: 1000 !important;
-        border: none !important;
-        font-weight: 800 !important;
-        box-shadow: 4px 4px 15px rgba(0,0,0,0.4) !important;
-        transition: all 0.3s ease !important;
+    /* Native MENU Tag Button */
+    .stButton > button:first-child:not([key="close_ov"]):not([key^="ov_"]) {
+        /* This selector is a bit generic, let's target the tag specifically if possible */
     }
     
-    .stButton > button[key="tag_btn"]:hover {
-        width: 115px !important;
-        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%) !important;
+    .stButton > button {
+        transition: all 0.2s ease !important;
     }
 
-    /* Padding for the main content so it doesn't hide behind the tag */
+    /* Padding for main content */
     .main .block-container {
         padding-top: 5rem !important;
     }
@@ -75,26 +61,58 @@ def nav_to(p):
     st.session_state['show_menu'] = False
     st.rerun()
 
-# --- CUSTOM MENU TAG (NATIVE) ---
+# --- CUSTOM MENU TAG ---
 if not st.session_state['show_menu']:
-    # We use a button with a specific key to target it with CSS
-    if st.button("💎 MENU", key="tag_btn"):
+    # Use a clear key for the tag button
+    if st.button("💎 MENU", key="main_menu_tag"):
         st.session_state['show_menu'] = True
         st.rerun()
+    
+    # Position the tag button
+    st.markdown("""
+        <style>
+        .stButton > button[key="main_menu_tag"] {
+            position: fixed !important;
+            top: 25px !important;
+            left: 0 !important;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+            color: white !important;
+            border-radius: 0 12px 12px 0 !important;
+            width: 100px !important;
+            height: 45px !important;
+            z-index: 1000 !important;
+            border: none !important;
+            font-weight: 800 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
 # --- OVERLAY MENU ---
 if st.session_state['show_menu']:
-    # Render the menu as a full-page overlay using columns for centering
-    st.markdown("<h1 style='text-align:center; color:white; font-size:3.5rem; margin-top:10vh; margin-bottom:3rem;'>💎 WealthFlow</h1>", unsafe_allow_html=True)
+    # The 'X' button needs to be at the very top of the DOM to be interactive
+    # And we use a standard Streamlit layout to ensure it's a real button
     
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
+    col_space, col_close = st.columns([10, 2])
+    with col_close:
+        if st.button("✕ CLOSE", key="close_ov", use_container_width=True):
+            st.session_state['show_menu'] = False
+            st.rerun()
+            
+    # Centered Logo and Credit
+    st.markdown("<h1 style='text-align:center; color:white; font-size:2.8rem; margin-top:20px;'>💎 WealthFlow</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#94a3b8; font-size:0.9rem; margin-top:-10px; font-style:italic;'>Made by Ganesh Narapareddy</p>", unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Navigation Buttons (Mobile Optimized)
+    _, c_btns, _ = st.columns([0.1, 0.8, 0.1])
+    with c_btns:
         pages = {
             "Dashboard": "📊 Dashboard",
             "Transactions": "💸 Transactions",
-            "Budgets": "🎯 Budgets",
+            "Budgets": "📋 Budgets",
             "Subscriptions": "💳 Subscriptions",
-            "Goals": "🐷 Goals",
+            "Goals": "🎯 Goals",
             "Assets": "📈 Assets",
             "Settings": "⚙️ Settings"
         }
@@ -102,11 +120,7 @@ if st.session_state['show_menu']:
         for p_id, p_label in pages.items():
             if st.button(p_label, key=f"ov_{p_id}", use_container_width=True):
                 nav_to(p_id)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("✕ Close Menu", key="close_ov", use_container_width=True):
-            st.session_state['show_menu'] = False
-            st.rerun()
+    
     st.stop()
 
 # --- PAGE CONTENT ---
