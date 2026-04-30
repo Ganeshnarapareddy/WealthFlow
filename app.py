@@ -21,17 +21,25 @@ st.set_page_config(
     page_title="WealthFlow Pro",
     page_icon="💎",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed" # Default to collapsed for mobile
 )
 
 # Initialize Session State
 if 'sym' not in st.session_state: st.session_state['sym'] = '₹'
 if 'edit_asset_id' not in st.session_state: st.session_state['edit_asset_id'] = None
+if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
+if 'init_time' not in st.session_state: st.session_state['init_time'] = datetime.now().time()
+if 'init_date' not in st.session_state: st.session_state['init_date'] = datetime.now().date()
 
 apply_styles()
 
 def fmt(val):
     return f"{st.session_state['sym']}{val:,.2f}"
+
+def navigate(p):
+    st.session_state['page'] = p
+    # On mobile, a rerun with initial_sidebar_state="collapsed" usually helps
+    st.rerun()
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -41,11 +49,22 @@ with st.sidebar:
     
     st.divider()
     
-    page = st.radio(
-        "Navigation",
-        ["Dashboard", "Transactions", "Budgets", "Subscriptions", "Goals", "Assets", "Settings"],
-        index=0
-    )
+    # Custom Navigation Buttons
+    pages = {
+        "Dashboard": "📊 Dashboard",
+        "Transactions": "💸 Transactions",
+        "Budgets": "🎯 Budgets",
+        "Subscriptions": "💳 Subscriptions",
+        "Goals": "🐷 Goals",
+        "Assets": "📈 Assets",
+        "Settings": "⚙️ Settings"
+    }
+    
+    for p_id, p_label in pages.items():
+        # Highlight active page button
+        is_active = st.session_state['page'] == p_id
+        if st.button(p_label, key=f"nav_{p_id}", use_container_width=True, type="primary" if is_active else "secondary"):
+            navigate(p_id)
     
     st.divider()
     if st.button("🔄 Hard Reset Cache", use_container_width=True):
@@ -54,15 +73,15 @@ with st.sidebar:
 
 # --- PAGES ---
 
+page = st.session_state['page']
+
 if page == "Dashboard":
     h1, h2 = st.columns([3, 1])
-    with h1:
-        st.markdown('<h1 class="main-header">Command Center</h1>', unsafe_allow_html=True)
+    with h1: st.markdown('<h1 class="main-header">Command Center</h1>', unsafe_allow_html=True)
     with h2:
         sym_map = {"INR (₹)": "₹", "USD ($)": "$", "EUR (€)": "€", "GBP (£)": "£"}
         try: curr_idx = list(sym_map.values()).index(st.session_state['sym'])
         except: curr_idx = 0
-            
         cur_label = st.selectbox("Currency", list(sym_map.keys()), index=curr_idx, label_visibility="collapsed")
         if sym_map[cur_label] != st.session_state['sym']:
             st.session_state['sym'] = sym_map[cur_label]
@@ -80,94 +99,54 @@ if page == "Dashboard":
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    tab_spend, tab_flow, tab_wealth, tab_burn = st.tabs([
-        "📊 Spending Mix", "📉 Cash Flow", "💰 Wealth Split", "🔥 Burn Rate"
-    ])
-    
-    with tab_spend:
-        c1, c2 = st.columns([1.5, 1])
-        with c1:
-            df_sp = FinanceService.get_spending_by_category()
-            if not df_sp.empty:
-                fig = px.pie(df_sp, values='Amount', names='Category', hole=0.5,
-                             color_discrete_sequence=px.colors.qualitative.Pastel)
-                fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                                  font_color="#e2e8f0", margin=dict(t=10, b=10, l=0, r=0),
-                                  legend=dict(orientation="h", y=-0.1))
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                empty_state("No Data", "Log transactions to see spending distribution.")
-        with c2:
-            section_header("Recent Pulse")
-            df_r = FinanceService.get_recent_transactions(6)
-            if not df_r.empty:
-                for _, r in df_r.iterrows():
-                    color = "#f87171" if r['Type'] == 'Expense' else "#4ade80"
-                    sign = "-" if r['Type'] == 'Expense' else "+"
-                    st.markdown(
-                        f"<div style='display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);'>"
-                        f"<span>{r['Icon']} {r['Description'] or r['Category']}</span>"
-                        f"<span style='color:{color}; font-weight:600'>{sign}{fmt(r['Amount'])}</span>"
-                        f"</div>", 
-                        unsafe_allow_html=True
-                    )
-            else:
-                st.caption("No recent transactions.")
-
-    with tab_flow:
+    t_sp, t_fl, t_we, t_bu = st.tabs(["📊 Spending", "📉 Cash Flow", "💰 Wealth", "🔥 Burn"])
+    with t_sp:
+        df_sp = FinanceService.get_spending_by_category()
+        if not df_sp.empty:
+            fig = px.pie(df_sp, values='Amount', names='Category', hole=0.5)
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0", margin=dict(t=0,b=0,l=0,r=0))
+            st.plotly_chart(fig, use_container_width=True)
+        else: empty_state("No Data", "Log entries to see mix.")
+        
+    with t_fl:
         if inc > 0 or exp > 0:
             fig2 = go.Figure(data=[
-                go.Bar(name='Income', x=['This Month'], y=[inc], marker_color='#4ade80', text=fmt(inc), textposition='auto'),
-                go.Bar(name='Expense', x=['This Month'], y=[exp], marker_color='#f87171', text=fmt(exp), textposition='auto')
+                go.Bar(name='In', x=['Month'], y=[inc], marker_color='#4ade80'),
+                go.Bar(name='Out', x=['Month'], y=[exp], marker_color='#f87171')
             ])
-            fig2.update_layout(barmode='group', paper_bgcolor='rgba(0,0,0,0)', 
-                               plot_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0",
-                               margin=dict(t=20, b=20))
+            fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0")
             st.plotly_chart(fig2, use_container_width=True)
-            
-            surplus = inc - exp
-            s_color = "#4ade80" if surplus >= 0 else "#f87171"
-            st.markdown(f"<div style='text-align:center; font-size:1.4rem; font-weight:700; color:{s_color}'>Surplus: {fmt(surplus)}</div>", unsafe_allow_html=True)
-        else:
-            empty_state("No Flow Data", "Income & expense data will appear here.")
-
-    with tab_wealth:
-        acc_bal = net - AssetService.get_total_assets_value()
+        else: empty_state("No Data", "Flow data will appear here.")
+        
+    with t_we:
         ast_val = AssetService.get_total_assets_value()
-        fig3 = px.pie(values=[acc_bal, ast_val], names=['Liquid Cash', 'Invested Assets'],
-                      color_discrete_sequence=['#3b82f6', '#8b5cf6'], hole=0.6)
-        fig3.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                           font_color="#e2e8f0", margin=dict(t=10, b=10, l=0, r=0))
+        fig3 = px.pie(values=[net-ast_val, ast_val], names=['Cash', 'Invested'], hole=0.6)
+        fig3.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0")
         st.plotly_chart(fig3, use_container_width=True)
 
-    with tab_burn:
+    with t_bu:
         df_b = BudgetService.get_monthly_budgets()
-        total_limit = df_b['Limit'].sum() if not df_b.empty else 0
-        if total_limit > 0:
-            fig4 = go.Figure(go.Indicator(
-                mode = "gauge+number",
-                value = exp,
-                gauge = {'axis': {'range': [None, total_limit]}, 'bar': {'color': "#3b82f6"}}
-            ))
+        limit = df_b['Limit'].sum() if not df_b.empty else 0
+        if limit > 0:
+            fig4 = go.Figure(go.Indicator(mode="gauge+number", value=exp, gauge={'axis': {'range': [None, limit]}}))
             fig4.update_layout(paper_bgcolor='rgba(0,0,0,0)', font={'color': "#e2e8f0"})
             st.plotly_chart(fig4, use_container_width=True)
-        else:
-            empty_state("No Budgets", "Set budgets to see burn rate.")
+        else: empty_state("No Budgets", "Set limits to track burn.")
 
 elif page == "Transactions":
     st.markdown('<h1 class="main-header">Ledger</h1>', unsafe_allow_html=True)
     t1, t2 = st.tabs(["➕ Add Entry", "📜 History"])
     
     with t1:
-        # Use a simpler layout for the form to avoid React loops on mobile
         with st.form("add_txn_pro", clear_on_submit=True):
             txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True)
             amt = st.number_input("Amount", min_value=0.0, step=1.0)
             
-            # Use columns only if not on a very small screen (Streamlit handles this, but let's be safe)
-            c1, c2 = st.columns(2)
-            with c1: dt = st.date_input("Date", value=datetime.now())
-            with c2: tm = st.time_input("Time", value=datetime.now().time())
+            # Use stable default values for time/date to avoid re-render loops on mobile
+            dt = st.date_input("Date", value=st.session_state['init_date'])
+            # Using a text input or a simpler time selector if the time_input crashes
+            # But let's try a stable key first
+            tm = st.time_input("Time", value=st.session_state['init_time'], key="txn_time_widget")
             
             all_cats = FinanceService.get_categories()
             filtered = all_cats[all_cats['type'] == txn_type]
@@ -180,7 +159,9 @@ elif page == "Transactions":
                     full_dt = datetime.combine(dt, tm)
                     FinanceService.add_transaction(amt, cat_opts[cat_sel], desc, full_dt, txn_type)
                     st.success("Transaction Logged!")
-                    # No st.rerun() here - let the form submission handle the refresh
+                    # Force update init values for next time
+                    st.session_state['init_time'] = datetime.now().time()
+                    st.session_state['init_date'] = datetime.now().date()
 
     with t2:
         df_hist = FinanceService.get_recent_transactions(100)
@@ -188,8 +169,7 @@ elif page == "Transactions":
             disp_df = df_hist.copy()
             disp_df['Amount'] = disp_df.apply(lambda r: f"{'-' if r['Type']=='Expense' else '+'} {fmt(r['Amount'])}", axis=1)
             st.dataframe(disp_df[['Date', 'Icon', 'Description', 'Category', 'Amount']], use_container_width=True, hide_index=True)
-        else:
-            empty_state("No History", "Start logging transactions to see them here.")
+        else: empty_state("No History", "Log transactions to see them here.")
 
 elif page == "Budgets":
     st.markdown('<h1 class="main-header">Guardrails</h1>', unsafe_allow_html=True)
@@ -203,22 +183,19 @@ elif page == "Budgets":
             if st.form_submit_button("Lock Budget"):
                 BudgetService.add_budget(cat_opts[sel_cat], limit, datetime.now().month, datetime.now().year)
                 st.rerun()
-                
     df_b = BudgetService.get_monthly_budgets()
     if not df_b.empty:
         for _, row in df_b.iterrows():
             c1, c2 = st.columns([4, 1])
             with c1:
                 st.markdown(f"**{row['Category']}**")
-                prog = min(1.0, row['Progress'])
-                st.progress(prog)
+                st.progress(min(1.0, row['Progress']))
                 st.caption(f"{fmt(row['Spent'])} of {fmt(row['Limit'])}")
             with c2:
                 if st.button("🗑️", key=f"del_{row['id']}"):
                     BudgetService.delete_budget(row['id'])
                     st.rerun()
-    else:
-        empty_state("No Budgets", "Set limits to track your spending.")
+    else: empty_state("No Budgets", "Track your spending.")
 
 elif page == "Subscriptions":
     st.markdown('<h1 class="main-header">Recurring Bills</h1>', unsafe_allow_html=True)
@@ -227,22 +204,17 @@ elif page == "Subscriptions":
             name = st.text_input("Service Name")
             cost = st.number_input("Amount", min_value=0.0)
             icon = st.text_input("Emoji Icon", value="💳")
-            cycle = st.selectbox("Billing Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly"])
+            cycle = st.selectbox("Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly"])
             start = st.date_input("Start Date")
             if st.form_submit_button("Track Bill"):
                 RecurringService.add_subscription(name, cost, cycle, start, icon)
                 st.rerun()
-                
     df_s = RecurringService.get_subscriptions()
     if not df_s.empty:
         for _, row in df_s.iterrows():
             c1, c2, c3 = st.columns([3, 2, 1])
-            with c1:
-                st.markdown(f"**{row['Icon']} {row['Name']}**")
-                st.caption(f"{row['Cycle']}")
-            with c2:
-                st.markdown(f"**{fmt(row['Amount'])}**")
-                st.caption(f"Next: {row['Next Date']}")
+            with c1: st.markdown(f"**{row['Icon']} {row['Name']}**")
+            with c2: st.markdown(f"**{fmt(row['Amount'])}**")
             with c3:
                 if st.button("🗑️", key=f"sdel_{row['id']}"):
                     RecurringService.delete_subscription(row['id'])
@@ -253,14 +225,13 @@ elif page == "Goals":
     st.markdown('<h1 class="main-header">Piggy Bank</h1>', unsafe_allow_html=True)
     with st.expander("➕ Create New Goal"):
         with st.form("new_goal"):
-            gname = st.text_input("What are we saving for?")
+            gname = st.text_input("Saving for…")
             target = st.number_input("Target Amount", min_value=1.0)
             deadline = st.date_input("Target Date")
             icon = st.text_input("Emoji Logo", value="🎯")
             if st.form_submit_button("Create Goal"):
                 GoalService.add_goal(gname, target, deadline, icon)
                 st.rerun()
-                
     df_g = GoalService.get_goals()
     if not df_g.empty:
         for _, row in df_g.iterrows():
@@ -268,7 +239,6 @@ elif page == "Goals":
             prog = min(1.0, row['Current'] / row['Target']) if row['Target'] > 0 else 0
             st.progress(prog)
             st.write(f"Saved: **{fmt(row['Current'])}** / {fmt(row['Target'])}")
-            
             gc1, gc2, gc3 = st.columns([2, 1, 1])
             with gc1: add_val = st.number_input("Add", min_value=0.0, key=f"add_{row['id']}")
             with gc2: 
@@ -307,16 +277,12 @@ elif page == "Assets":
                 if st.form_submit_button("Add Asset"):
                     AssetService.add_asset(aname, atype, aval)
                     st.rerun()
-                
     df_a = AssetService.get_assets()
     if not df_a.empty:
         for _, row in df_a.iterrows():
             ac1, ac2, ac3, ac4 = st.columns([3, 2, 1, 1])
-            with ac1:
-                st.markdown(f"**{row['Name']}**")
-                st.caption(row['Type'])
-            with ac2:
-                st.markdown(f"**{fmt(row['Value'])}**")
+            with ac1: st.markdown(f"**{row['Name']}**")
+            with ac2: st.markdown(f"**{fmt(row['Value'])}**")
             with ac3:
                 if st.button("📝", key=f"edit_{row['id']}"):
                     st.session_state['edit_asset_id'] = row['id']

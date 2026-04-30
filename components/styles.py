@@ -80,8 +80,31 @@ def apply_styles():
             font-weight: 600 !important;
             box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3) !important;
             transition: all 0.2s ease !important;
+            width: 100% !important;
         }
         
+        /* Secondary / Navigation Buttons in Sidebar */
+        [data-testid="stSidebar"] .stButton > button {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            text-align: left !important;
+            padding: 12px 18px !important;
+            margin-bottom: 4px !important;
+            box-shadow: none !important;
+        }
+
+        [data-testid="stSidebar"] .stButton > button:hover {
+            background: rgba(59, 130, 246, 0.1) !important;
+            border-color: rgba(59, 130, 246, 0.3) !important;
+        }
+
+        /* Active Page Button Highlight */
+        [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+            border: none !important;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2) !important;
+        }
+
         .stButton > button:hover {
             transform: scale(1.02);
             box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4) !important;
