@@ -33,6 +33,7 @@ if 'edit_asset_id' not in st.session_state: st.session_state['edit_asset_id'] = 
 if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
 if 'show_menu' not in st.session_state: st.session_state['show_menu'] = False
 if 'delete_confirm' not in st.session_state: st.session_state['delete_confirm'] = {}
+if 'sub_added' not in st.session_state: st.session_state['sub_added'] = False
 
 apply_styles()
 
@@ -402,6 +403,9 @@ elif page == "Budgets":
 
 elif page == "Subscriptions":
     st.markdown('<h1 class="main-header">Recurring Bills</h1>', unsafe_allow_html=True)
+    if st.session_state.get('sub_added'):
+        st.success("Subscription added!")
+        st.session_state['sub_added'] = False
     with st.expander("➕ Add Subscription"):
         with st.form("new_sub"):
             name = st.text_input("Service Name")
@@ -415,6 +419,7 @@ elif page == "Subscriptions":
             if st.form_submit_button("Track Bill"):
                 final_cycle = f"Custom:{custom_months}" if cycle == "Custom" else cycle
                 RecurringService.add_subscription(name, cost, final_cycle, start, icon)
+                st.session_state['sub_added'] = True
                 st.rerun()
     df_s = RecurringService.get_subscriptions()
     if not df_s.empty:
