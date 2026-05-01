@@ -11,6 +11,8 @@ from services.budget_service import BudgetService
 from services.recurring_service import RecurringService
 from services.goal_service import GoalService
 from services.asset_service import AssetService
+from services.loan_service import LoanService
+from services.credit_card_service import CreditCardService
 
 # Import UI Components
 from components.styles import apply_styles
@@ -37,6 +39,18 @@ if 'sub_added' not in st.session_state: st.session_state['sub_added'] = False
 if 'budget_added' not in st.session_state: st.session_state['budget_added'] = False
 if 'goal_added' not in st.session_state: st.session_state['goal_added'] = False
 if 'asset_added' not in st.session_state: st.session_state['asset_added'] = False
+if 'loan_added' not in st.session_state: st.session_state['loan_added'] = False
+if 'loan_deleted' not in st.session_state: st.session_state['loan_deleted'] = False
+if 'card_added' not in st.session_state: st.session_state['card_added'] = False
+if 'card_deleted' not in st.session_state: st.session_state['card_deleted'] = False
+if 'loan_payment_added' not in st.session_state: st.session_state['loan_payment_added'] = False
+if 'card_txn_added' not in st.session_state: st.session_state['card_txn_added'] = False
+if 'edit_loan_id' not in st.session_state: st.session_state['edit_loan_id'] = None
+if 'edit_card_id' not in st.session_state: st.session_state['edit_card_id'] = None
+if 'cat_added' not in st.session_state: st.session_state['cat_added'] = False
+if 'loan_given_version' not in st.session_state: st.session_state['loan_given_version'] = 0
+if 'loan_taken_version' not in st.session_state: st.session_state['loan_taken_version'] = 0
+if 'card_add_version' not in st.session_state: st.session_state['card_add_version'] = 0
 
 apply_styles()
 
@@ -86,6 +100,9 @@ def render_delete_button(item_id, button_key, delete_func, item_name="item"):
             if st.button("✅ Yes", key=f"yes_{item_id}"):
                 delete_func(item_id)
                 st.session_state['delete_confirm'][conf_key] = False
+                # Set delete flag for popup
+                if "cdel_" in button_key: st.session_state['card_deleted'] = True
+                elif "ldel_" in button_key or "del_loan_" in button_key: st.session_state['loan_deleted'] = True
                 st.rerun()
         with c2:
             if st.button("❌ No", key=f"no_{item_id}"):
@@ -143,6 +160,8 @@ if st.session_state['show_menu']:
             "Transactions": "💸 Transactions",
             "Budgets": "📋 Budgets",
             "Subscriptions": "💳 Subscriptions",
+            "Loans": "💰 Loans and EMI",
+            "Credit Cards": "💳 Credit Cards",
             "Goals": "🎯 Goals",
             "Assets": "📈 Assets",
             "Settings": "⚙️ Settings"
@@ -157,6 +176,8 @@ if st.session_state['show_menu']:
 # --- PAGE CONTENT ---
 
 def fmt(val):
+    if val is None:
+        return f"{st.session_state['sym']}0.00"
     return f"{st.session_state['sym']}{val:,.2f}"
 
 page = st.session_state['page']
@@ -167,9 +188,9 @@ if page == "Dashboard":
     with h2:
         # Year selector with "All" option
         years = FinanceService.get_available_years()
-        year_options = ["All"] + [str(y) for y in years]
+        year_options = [str(y) for y in years] + ["All"]
         if 'selected_year' not in st.session_state:
-            st.session_state['selected_year'] = "All"
+            st.session_state['selected_year'] = str(datetime.now().year)
         try:
             year_idx = year_options.index(str(st.session_state['selected_year']))
         except:
@@ -180,21 +201,58 @@ if page == "Dashboard":
             st.session_state['selected_year'] = sel_year
             st.rerun()
 
+    # Fiscal Month Toggle
+    fiscal_day = FinanceService.get_setting('fiscal_month_start_day', '1')
+    fiscal_day = int(fiscal_day) if str(fiscal_day).isdigit() else 1
+    
+    if 'month_mode' not in st.session_state:
+        st.session_state['month_mode'] = "Calendar"
+        
+    st.session_state['month_mode'] = st.radio(
+        "Month Mode", ["Calendar", "Fiscal"], 
+        index=0 if st.session_state['month_mode'] == "Calendar" else 1,
+        horizontal=True, label_visibility="collapsed", key="month_mode_radio"
+    )
+    month_mode = st.session_state['month_mode']
+
     with h3:
         # Month selector with "All" option
-        month_display = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         if 'selected_month' not in st.session_state:
             st.session_state['selected_month'] = "All"
-        try:
-            if st.session_state['selected_month'] == "All":
+
+        # Fiscal mode: show fiscal period labels
+        if month_mode == "Fiscal" and sel_year != "All":
+            fiscal_day_val = FinanceService.get_setting('fiscal_month_start_day', '1')
+            fiscal_day_val = int(fiscal_day_val) if str(fiscal_day_val).isdigit() else 1
+            month_options = ["All"]
+            month_map = [None]  # index 0 = All
+            for m in range(1, 13):
+                label = FinanceService.get_fiscal_month_label(sel_year, m, fiscal_day_val)
+                month_options.append(label)
+                month_map.append(m)
+            try:
+                sel = st.session_state['selected_month']
+                if sel == "All":
+                    idx = 0
+                else:
+                    idx = month_map.index(int(sel))
+            except:
+                idx = 0
+            sel_label = st.selectbox("Month", month_options, index=idx, label_visibility="collapsed", key="month_sel")
+            sel_month = "All" if sel_label == "All" else month_map[month_options.index(sel_label)]
+        else:
+            month_display = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            try:
+                if st.session_state['selected_month'] == "All":
+                    month_idx = 0
+                else:
+                    month_idx = int(st.session_state['selected_month'])
+            except:
                 month_idx = 0
-            else:
-                month_idx = int(st.session_state['selected_month'])
-        except:
-            month_idx = 0
-        sel_month_disp = st.selectbox("Month", month_display, index=month_idx, label_visibility="collapsed", key="month_sel")
-        sel_month = "All" if sel_month_disp == "All" else month_display.index(sel_month_disp)
+            sel_month_disp = st.selectbox("Month", month_display, index=month_idx, label_visibility="collapsed", key="month_sel")
+            sel_month = "All" if sel_month_disp == "All" else month_display.index(sel_month_disp)
+
         if sel_month != st.session_state['selected_month']:
             st.session_state['selected_month'] = sel_month
             st.rerun()
@@ -209,17 +267,20 @@ if page == "Dashboard":
             st.session_state['sym'] = sym_map[cur_label]
             st.rerun()
 
+    # Now that sel_year and sel_month are both known, calculate the final fiscal_start_day
+    fiscal_start_day = fiscal_day if (month_mode == "Fiscal" and sel_year != "All" and sel_month != "All") else None
+
     # Get all metrics with filtering
     net = FinanceService.get_net_worth()
     burn = RecurringService.get_monthly_recurring_total()
     inc, exp = FinanceService.get_monthly_income_vs_expense(
-        sel_year, sel_month
+        sel_year, sel_month, fiscal_start_day
     )
     today_spent, yesterday_spent = FinanceService.get_today_vs_yesterday()
     day_pct = ((today_spent - yesterday_spent) / yesterday_spent * 100) if yesterday_spent > 0 else 0
 
     # Get comparison data
-    prev_inc, prev_exp, prev_label = FinanceService.get_previous_period_data(sel_year, sel_month)
+    prev_inc, prev_exp, prev_label = FinanceService.get_previous_period_data(sel_year, sel_month, fiscal_start_day)
     inc_delta_str, inc_increased = FinanceService.get_comparison_delta(inc, prev_inc)
     exp_delta_str, exp_increased = FinanceService.get_comparison_delta(exp, prev_exp)
 
@@ -230,7 +291,7 @@ if page == "Dashboard":
 
     # Top category and comparison
     top_cat, top_amt, prev_top_amt, top_delta_str, top_increased = FinanceService.get_top_category_comparison(
-        sel_year, sel_month
+        sel_year, sel_month, fiscal_start_day
     )
 
     # Subscription comparison
@@ -269,8 +330,39 @@ if page == "Dashboard":
                          delta=burn_delta_str,
                          delta_color="inverse")
 
+    # --- Credit Card Summary ---
+    st.markdown("---")
+    cc_col1, cc_col2 = st.columns([2, 1])
+    df_cards = CreditCardService.get_cards()
+    with cc_col1:
+        st.markdown("#### 💳 Credit Card Statistics")
+        if not df_cards.empty:
+            total_limit = df_cards['card_limit'].sum()
+            total_outstanding = df_cards['current_balance'].sum()
+            total_available = total_limit + total_outstanding
+            utilization = (-total_outstanding / total_limit * 100) if total_limit > 0 else 0
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Limit", fmt(total_limit))
+            c2.metric("Outstanding", fmt(total_outstanding), delta=f"{utilization:.1f}% Use", delta_color="inverse")
+            c3.metric("Available", fmt(total_available))
+            st.progress(max(0.0, min(1.0, utilization/100)))
+        else:
+            st.info("No credit cards tracked yet.")
+            
+    with cc_col2:
+        st.markdown("#### 🔔 Bill Alerts")
+        card_alerts = CreditCardService.get_upcoming_bills(15)
+        if card_alerts:
+            for bill in card_alerts[:2]:
+                st.warning(f"**{bill['name']}** in {bill['days_left']}d")
+        else:
+            st.success("All bills clear!")
+
     # Smart Alerts Section
     st.markdown("### 🔔 Smart Alerts")
+
+    # Subscription renewals
     alerts = RecurringService.get_upcoming_renewals(30)
     if alerts:
         for alert in alerts[:5]:
@@ -284,8 +376,34 @@ if page == "Dashboard":
                 st.info(f"🟢 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
             else:
                 st.write(f"📅 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
-    else:
-        st.caption("No upcoming renewals")
+
+    # Loan due date alerts
+    loan_alerts = LoanService.get_upcoming_dues(30)
+    for alert in loan_alerts:
+        days = alert['days_left']
+        amt_fmt = fmt(alert['remaining'])
+        label = "Loan Given" if alert['loan_type'] == 'given' else "Loan Taken"
+        if days <= 0:
+            st.error(f"🔴 **{alert['person_name']}** ({label}) — **OVERDUE**! Outstanding: {amt_fmt}")
+        elif days <= 3:
+            st.warning(f"🔴 **{alert['person_name']}** ({label}) due in **{days} days**! Outstanding: {amt_fmt}")
+        elif days <= 7:
+            st.info(f"🟢 **{alert['person_name']}** ({label}) due in **{days} days**")
+        else:
+            st.write(f"📅 **{alert['person_name']}** ({label}) due in **{days} days**")
+
+    # Credit card bill alerts
+    card_alerts = CreditCardService.get_upcoming_bills(15)
+    for bill in card_alerts:
+        days = bill['days_left']
+        if days <= 0:
+            st.error(f"🔴 **{bill['name']}** ({bill['bank']}) bill **due today**! Outstanding: {fmt(bill['balance'])}")
+        elif days <= 3:
+            st.warning(f"🔴 **{bill['name']}** ({bill['bank']}) bill due in **{days} days**! Outstanding: {fmt(bill['balance'])}")
+        elif days <= 7:
+            st.info(f"🟢 **{bill['name']}** ({bill['bank']}) bill due in **{days} days**")
+        else:
+            st.write(f"📅 **{bill['name']}** ({bill['bank']}) bill in **{days} days**")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -294,7 +412,8 @@ if page == "Dashboard":
     with t_sp:
         df_sp = FinanceService.get_spending_by_category(
             sel_year if sel_year != "All" else None,
-            sel_month if sel_month != "All" else None
+            sel_month if sel_month != "All" else None,
+            fiscal_start_day
         )
         if not df_sp.empty:
             fig = px.bar(df_sp, x='Category', y='Amount', color='Amount',
@@ -308,7 +427,8 @@ if page == "Dashboard":
     with t_ie:
         df_ie = FinanceService.get_income_expense_by_month(
             sel_year if sel_year != "All" else None,
-            sel_month if sel_month != "All" else None
+            sel_month if sel_month != "All" else None,
+            fiscal_start_day
         )
         if not df_ie.empty:
             fig_ie = go.Figure(data=[
@@ -324,7 +444,8 @@ if page == "Dashboard":
     with t_tr:
         df_tr = FinanceService.get_spending_trend(
             sel_year if sel_year != "All" else None,
-            sel_month if sel_month != "All" else None
+            sel_month if sel_month != "All" else None,
+            fiscal_start_day=fiscal_start_day
         )
         if not df_tr.empty:
             fig_tr = px.line(df_tr, x='Month', y='Amount', markers=True)
@@ -443,6 +564,356 @@ elif page == "Subscriptions":
                 render_delete_button(row['id'], f"sdel_{row['id']}", RecurringService.delete_subscription, row['Name'])
             st.divider()
 
+elif page == "Loans":
+    st.markdown('<h1 class="main-header">Loans Tracker</h1>', unsafe_allow_html=True)
+
+    # Edit mode    # Summary
+    loans_all = LoanService.get_loans()
+    if not loans_all.empty:
+        # Only show metrics for non-paid loans for clarity
+        active_loans = loans_all[loans_all['status'] != 'paid']
+        total_outstanding = active_loans['remaining_amount'].sum()
+        total_emi = active_loans[active_loans['emi_active'] == 1]['emi_amount'].sum()
+        total_given = active_loans[active_loans['loan_type'] == 'given']['amount'].sum()
+        total_taken = active_loans[active_loans['loan_type'] == 'taken']['amount'].sum()
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+        with c1: st.metric("Total Given", fmt(total_given))
+        with c2: st.metric("Total Taken", fmt(total_taken))
+        with c3: st.metric("Outstanding", fmt(total_outstanding))
+        with c4: st.metric("Monthly EMI", fmt(total_emi))
+
+
+    if st.session_state.get('edit_loan_id'):
+        loan = LoanService.get_loan_by_id(st.session_state['edit_loan_id'])
+        if loan:
+            st.markdown("### ✏️ Edit Loan")
+            with st.form("edit_loan_form"):
+                person = st.text_input("Person/Lender Name", value=loan[1])
+                amount = st.number_input("Original Amount", min_value=0.01, value=float(loan[2]))
+                interest = st.number_input("Interest Rate (%)", min_value=0.0, value=float(loan[4]))
+                start = st.date_input("Start Date", value=datetime.strptime(loan[5], "%Y-%m-%d").date() if loan[5] else datetime.now().date())
+                due = st.date_input("Due Date", value=datetime.strptime(loan[6], "%Y-%m-%d").date() if loan[6] else datetime.now().date())
+                emi_amt = st.number_input("EMI Amount", min_value=0.0, value=float(loan[7]))
+                emi_active = st.checkbox("Has EMI", value=bool(loan[8]))
+                tenure = st.number_input("Tenure (Months)", min_value=0, value=int(loan[9] or 0))
+                emi_start = st.date_input("EMI Start Date", value=datetime.strptime(loan[10], "%Y-%m-%d").date() if loan[10] else datetime.now().date())
+                notes = st.text_area("Notes", value=loan[13] if loan[13] else "")
+                if st.form_submit_button("Update Loan"):
+                    LoanService.update_loan(st.session_state['edit_loan_id'], person, amount, interest, start, due, emi_amt, emi_active, tenure, emi_start)
+                    st.session_state['edit_loan_id'] = None
+                    st.rerun()
+            if st.button("Cancel"):
+                st.session_state['edit_loan_id'] = None
+                st.rerun()
+            st.stop()
+
+    tab1, tab2 = st.tabs(["💸 Loans Given", "💳 Loans Taken"])
+
+    with tab1:
+        # Use version in key to force collapse on success
+        with st.expander("➕ Add Loan Given", expanded=False, key=f"exp_given_{st.session_state['loan_given_version']}"):
+            emi_active = st.checkbox("Has EMI", key="new_loan_given_emi_active", value=False)
+            with st.form("new_loan_given", clear_on_submit=True):
+                person = st.text_input("Person Name")
+                
+                if emi_active:
+                    emi_mode = st.radio("EMI Mode", ["Per Month (Auto Total)", "Total Amount (Auto EMI)"], horizontal=True)
+                    tenure = st.number_input("Tenure (Months)", min_value=1, value=12)
+                    if emi_mode == "Per Month (Auto Total)":
+                        emi_amt = st.number_input("Monthly EMI", min_value=0.01, value=100.0)
+                        amount = 0 # Calculated
+                    else:
+                        amount = st.number_input("Total Amount", min_value=0.01, value=None)
+                        emi_amt = 0 # Calculated
+                    
+                    emi_start = st.date_input("EMI Start Date")
+                    interest = 0.0
+                    start = None
+                    due = None
+                else:
+                    amount = st.number_input("Amount", min_value=0.01, value=None, placeholder="Loan amount")
+                    interest = st.number_input("Interest Rate (%)", min_value=0.0, value=0.0)
+                    start = st.date_input("Start Date")
+                    due = st.date_input("Due Date")
+                    tenure = 0
+                    emi_amt = 0.0
+                    emi_start = None
+                
+                notes = st.text_area("Notes")
+                if st.form_submit_button("Add Loan"):
+                    if emi_active:
+                        if emi_mode == "Per Month (Auto Total)":
+                            amount = emi_amt * tenure
+                        else:
+                            emi_amt = amount / tenure
+                    
+                    LoanService.add_loan(person, amount, 'given', interest, start, due, emi_amt, emi_active, tenure, emi_start, notes)
+                    st.session_state['loan_added'] = True
+                    st.session_state['loan_given_version'] += 1
+                    st.rerun()
+
+        loans = LoanService.get_loans('given')
+        # Debug
+        # st.write(f"DEBUG: Found {len(loans)} loans given")
+        if not loans.empty:
+            for _, row in loans.iterrows():
+                st.markdown(f"**{row['person_name']}** — {fmt(row['amount'])}")
+                st.caption(f"Due: {row['due_date']} | Status: {row['status']} | Remaining: {fmt(row['remaining_amount'])}")
+                if row['emi_active']:
+                    st.caption(f"EMI: {fmt(row['emi_amount'])}/month | Tenure: {row['tenure']} months")
+                
+                # Payment Schedule
+                payments = LoanService.get_loan_payments(row['id'])
+                if not payments.empty:
+                    with st.expander("📅 View Payment Schedule", expanded=False):
+                        cols = st.columns(3)
+                        for i, (idx, p) in enumerate(payments.iterrows()):
+                            with cols[i % 3]:
+                                is_paid = (p['status'] == 'paid')
+                                label = f"{p['due_date']}"
+                                if st.checkbox(label, value=is_paid, key=f"pay_chk_{p['id']}"):
+                                    if not is_paid:
+                                        LoanService.toggle_payment_status(p['id'], p['status'])
+                                        st.rerun()
+                                elif is_paid:
+                                    LoanService.toggle_payment_status(p['id'], p['status'])
+                                    st.rerun()
+                
+                c_edit, c_del = st.columns([1, 1])
+                with c_edit:
+                    if st.button("✏️ Edit", key=f"edit_g_{row['id']}", use_container_width=True):
+                        st.session_state['edit_loan_id'] = row['id']
+                        st.rerun()
+                with c_del:
+                    render_delete_button(row['id'], f"ldel_g_{row['id']}", LoanService.delete_loan, row['person_name'])
+                st.divider()
+        else:
+            empty_state("No Loans Given", "Lend money to track here.")
+
+    with tab2:
+        with st.expander("➕ Add Loan Taken", expanded=False, key=f"exp_taken_{st.session_state['loan_taken_version']}"):
+            emi_active_t = st.checkbox("Has EMI", key="new_loan_taken_emi_active", value=False)
+            with st.form("new_loan_taken", clear_on_submit=True):
+                person = st.text_input("Lender Name")
+
+                if emi_active_t:
+                    emi_mode_t = st.radio("EMI Mode", ["Per Month (Auto Total)", "Total Amount (Auto EMI)"], horizontal=True, key="emi_mode_t")
+                    tenure_t = st.number_input("Tenure (Months)", min_value=1, value=12)
+                    if emi_mode_t == "Per Month (Auto Total)":
+                        emi_amt_t = st.number_input("Monthly EMI", min_value=0.01, value=100.0)
+                        amount_t = 0
+                    else:
+                        amount_t = st.number_input("Total Amount", min_value=0.01, value=None)
+                        emi_amt_t = 0
+                    
+                    emi_start_t = st.date_input("EMI Start Date")
+                    interest_t = 0.0
+                    start_t = None
+                    due_t = None
+                else:
+                    amount_t = st.number_input("Amount", min_value=0.01, value=None, placeholder="Loan amount")
+                    interest_t = st.number_input("Interest Rate (%)", min_value=0.0, value=0.0)
+                    start_t = st.date_input("Start Date")
+                    due_t = st.date_input("Due Date")
+                    tenure_t = 0
+                    emi_amt_t = 0.0
+                    emi_start_t = None
+
+                notes = st.text_area("Notes")
+                if st.form_submit_button("Add Loan"):
+                    if emi_active_t:
+                        if emi_mode_t == "Per Month (Auto Total)":
+                            amount_t = emi_amt_t * tenure_t
+                        else:
+                            emi_amt_t = amount_t / tenure_t
+                    
+                    LoanService.add_loan(person, amount_t, 'taken', interest_t, start_t, due_t, emi_amt_t, emi_active_t, tenure_t, emi_start_t, notes)
+                    st.session_state['loan_added'] = True
+                    st.session_state['loan_taken_version'] += 1
+                    st.rerun()
+
+        loans = LoanService.get_loans('taken')
+        # st.write(f"DEBUG: Found {len(loans)} loans taken")
+        if not loans.empty:
+            for _, row in loans.iterrows():
+                st.markdown(f"**{row['person_name']}** — {fmt(row['amount'])}")
+                st.caption(f"Due: {row['due_date']} | Status: {row['status']} | Remaining: {fmt(row['remaining_amount'])}")
+                if row['emi_active']:
+                    st.caption(f"EMI: {fmt(row['emi_amount'])}/month | Tenure: {row['tenure']} months")
+
+                # Payment Schedule
+                payments = LoanService.get_loan_payments(row['id'])
+                if not payments.empty:
+                    with st.expander("📅 View Payment Schedule", expanded=False):
+                        cols = st.columns(3)
+                        for i, (idx, p) in enumerate(payments.iterrows()):
+                            with cols[i % 3]:
+                                is_paid = (p['status'] == 'paid')
+                                label = f"{p['due_date']}"
+                                if st.checkbox(label, value=is_paid, key=f"pay_chk_t_{p['id']}"):
+                                    if not is_paid:
+                                        LoanService.toggle_payment_status(p['id'], p['status'])
+                                        st.rerun()
+                                elif is_paid:
+                                    LoanService.toggle_payment_status(p['id'], p['status'])
+                                    st.rerun()
+
+                c_edit, c_del = st.columns([1, 1])
+                with c_edit:
+                    if st.button("✏️ Edit", key=f"edit_t_{row['id']}", use_container_width=True):
+                        st.session_state['edit_loan_id'] = row['id']
+                        st.rerun()
+                with c_del:
+                    render_delete_button(row['id'], f"ldel_t_{row['id']}", LoanService.delete_loan, row['person_name'])
+                st.divider()
+        else:
+            empty_state("No Loans Taken", "Borrow money to track here.")
+
+    # Success Popups centered
+    if st.session_state.get('loan_added') or st.session_state.get('loan_deleted') or st.session_state.get('loan_payment_added'):
+        st.markdown('<div class="center-popup">', unsafe_allow_html=True)
+        if st.session_state.get('loan_added'):
+            st.success("Loan added!")
+            st.session_state['loan_added'] = False
+        if st.session_state.get('loan_deleted'):
+            st.info("Loan removed.")
+            st.session_state['loan_deleted'] = False
+        if st.session_state.get('loan_payment_added'):
+            st.success("Payment recorded!")
+            st.session_state['loan_payment_added'] = False
+        st.markdown('</div>', unsafe_allow_html=True)
+
+elif page == "Credit Cards":
+    st.markdown('<h1 class="main-header">Credit Card Tracker</h1>', unsafe_allow_html=True)
+
+    if st.session_state.get('card_added'):
+        st.success("Card added!")
+        st.session_state['card_added'] = False
+    if st.session_state.get('card_txn_added'):
+        st.success("Transaction recorded!")
+        st.session_state['card_txn_added'] = False
+
+    # Edit mode    # Summary
+    df_cards = CreditCardService.get_cards()
+    if not df_cards.empty:
+        total_limit = df_cards['card_limit'].sum()
+        total_outstanding = df_cards['current_balance'].sum()
+        utilization = (total_outstanding / total_limit * 100) if total_limit > 0 else 0
+        c1, c2, c3 = st.columns([1, 1, 1])
+        with c1: st.metric("Total Limit", fmt(total_limit))
+        with c2: st.metric("Total Outstanding", fmt(total_outstanding))
+        with c3: st.metric("Utilization", f"{utilization:.1f}%")
+
+
+    if st.session_state.get('edit_card_id'):
+        card = CreditCardService.get_card_by_id(st.session_state['edit_card_id'])
+        if card:
+            st.markdown("### ✏️ Edit Card")
+            with st.form("edit_card_form"):
+                cname = st.text_input("Card Name", value=card[1])
+                cbank = st.text_input("Bank Name", value=card[2])
+                climit = st.number_input("Credit Limit", min_value=0.01, value=float(card[3] or 0.01))
+                cbill_day = st.number_input("Billing Date", min_value=1, max_value=31, value=int(card[4] or 1))
+                cclose_day = st.number_input("Closing Date", min_value=1, max_value=31, value=int(card[5] or 1))
+                if st.form_submit_button("Update Card"):
+                    CreditCardService.update_card(st.session_state['edit_card_id'], cname, cbank, climit, cbill_day, cclose_day)
+                    st.session_state['edit_card_id'] = None
+                    st.rerun()
+            if st.button("Cancel"):
+                st.session_state['edit_card_id'] = None
+                st.rerun()
+            st.stop()
+
+
+    # Upcoming bills alert
+    upcoming = CreditCardService.get_upcoming_bills(15)
+    if upcoming:
+        st.markdown("### 🔔 Upcoming Bills")
+        for bill in upcoming:
+            st.warning(f"**{bill['name']}** ({bill['bank']}) — bill due in **{bill['days_left']} days** | Outstanding: {fmt(bill['balance'])}")
+
+    # Add Credit Card form
+    with st.expander("➕ Add Credit Card", expanded=False, key=f"exp_card_{st.session_state['card_add_version']}"):
+        with st.form("new_card", clear_on_submit=True):
+            cname = st.text_input("Card Name (e.g. HDFC Regalia)")
+            cbank = st.text_input("Bank")
+            climit = st.number_input("Limit", min_value=0.0)
+            cbilling = st.number_input("Billing Day (1-31)", min_value=1, max_value=31, value=15)
+            cclosing = st.number_input("Closing Day (1-31)", min_value=1, max_value=31, value=1)
+            if st.form_submit_button("Add Card"):
+                CreditCardService.add_card(cname, cbank, climit, cbilling, cclosing)
+                st.session_state['card_added'] = True
+                st.session_state['card_add_version'] += 1
+                st.rerun()
+    df_cards = CreditCardService.get_cards()
+    if not df_cards.empty:
+        for _, card in df_cards.iterrows():
+            with st.expander(f"{card['name']} — {card['bank']}"):
+                c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+                with c1:
+                    limit_val = card['card_limit'] if card['card_limit'] is not None else 0.0
+                    balance_val = card['current_balance'] if card['current_balance'] is not None else 0.0
+                    st.markdown(f"**Limit:** {fmt(limit_val)}")
+                    st.markdown(f"**Outstanding:** {fmt(balance_val)}")
+                    avail = limit_val + balance_val
+                    st.markdown(f"**Available:** {fmt(avail)}")
+                with c2:
+                    st.markdown(f"**Billing Day:** {card['billing_date']}")
+                with c3:
+                    if st.button("✏️", key=f"edit_card_{card['id']}"):
+                        st.session_state['edit_card_id'] = card['id']
+                        st.rerun()
+                with c4:
+                    render_delete_button(card['id'], f"cdel_{card['id']}", CreditCardService.delete_card, card['name'])
+
+                # Add transaction form
+                st.markdown("**Transactions**")
+                txn_tab1, txn_tab2 = st.tabs(["➕ Add Expense", "➕ Add Payment"])
+                with txn_tab1:
+                    with st.form(f"card_exp_{card['id']}"):
+                        exp_desc = st.text_input("Description", key=f"exp_desc_{card['id']}")
+                        exp_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"exp_amt_{card['id']}")
+                        if st.form_submit_button("Record Expense"):
+                            if exp_amt and exp_amt > 0:
+                                CreditCardService.add_transaction(card['id'], exp_amt, exp_desc, 'expense')
+                                st.session_state['card_txn_added'] = True
+                                st.rerun()
+                with txn_tab2:
+                    with st.form(f"card_pay_{card['id']}"):
+                        pay_desc = st.text_input("Description", key=f"pay_desc_{card['id']}")
+                        pay_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"pay_amt_{card['id']}")
+                        if st.form_submit_button("Record Payment"):
+                            if pay_amt and pay_amt > 0:
+                                CreditCardService.add_transaction(card['id'], pay_amt, pay_desc, 'payment')
+                                st.session_state['card_txn_added'] = True
+                                st.rerun()
+
+                # List recent transactions
+                df_txns = CreditCardService.get_card_transactions(card['id'])
+                if df_txns.empty:
+                    st.info("No transactions yet.")
+                else:
+                    st.dataframe(
+                        df_txns[['date', 'description', 'amount', 'txn_type']],
+                        use_container_width=True, hide_index=True
+                    )
+    else:
+        empty_state("No Credit Cards", "Add your first credit card to start tracking.")
+
+    # Success Popups centered
+    if st.session_state.get('card_added') or st.session_state.get('card_deleted') or st.session_state.get('card_txn_added'):
+        st.markdown('<div class="center-popup">', unsafe_allow_html=True)
+        if st.session_state.get('card_added'):
+            st.success("Credit Card added!")
+            st.session_state['card_added'] = False
+        if st.session_state.get('card_deleted'):
+            st.info("Credit Card removed.")
+            st.session_state['card_deleted'] = False
+        if st.session_state.get('card_txn_added'):
+            st.success("Transaction recorded!")
+            st.session_state['card_txn_added'] = False
+        st.markdown('</div>', unsafe_allow_html=True)
+
 elif page == "Goals":
     st.markdown('<h1 class="main-header">Piggy Bank</h1>', unsafe_allow_html=True)
     if st.session_state.get('goal_added'):
@@ -524,8 +995,61 @@ elif page == "Assets":
 
 elif page == "Settings":
     st.markdown('<h1 class="main-header">Preferences</h1>', unsafe_allow_html=True)
+
+    if st.session_state.get('cat_added'):
+        st.success("Category added!")
+        st.session_state['cat_added'] = False
+
+    # Currency Settings
     cur_opts = {"INR (₹)": "₹", "USD ($)": "$", "EUR (€)": "€", "GBP (£)": "£"}
     sel_cur = st.selectbox("Preferred Symbol", list(cur_opts.keys()), index=list(cur_opts.values()).index(st.session_state['sym']))
     if st.button("Save Settings"):
         st.session_state['sym'] = cur_opts[sel_cur]
         st.rerun()
+
+    st.divider()
+
+    # Fiscal Month Settings
+    st.markdown("### 📅 Fiscal Month")
+    st.caption("Set the day your salary arrives. Fiscal month starts on this day.")
+    cur_day = FinanceService.get_setting('fiscal_month_start_day', '1')
+    cur_day = int(cur_day) if str(cur_day).isdigit() else 1
+    new_day = st.number_input("Fiscal Month Start Day", min_value=1, max_value=28, value=cur_day)
+    if st.button("Save Fiscal Day"):
+        FinanceService.set_setting('fiscal_month_start_day', str(new_day))
+        st.success(f"Fiscal month start day set to {new_day}!")
+        st.rerun()
+
+    st.divider()
+
+    # Dynamic Categories
+    st.markdown("### 📁 Manage Categories")
+
+    # Add Category Form
+    with st.expander("➕ Add Category"):
+        with st.form("new_cat"):
+            cat_name = st.text_input("Category Name")
+            cat_type = st.selectbox("Type", ["Income", "Expense"])
+            cat_icon = st.text_input("Icon", value="📁")
+            if st.form_submit_button("Add Category"):
+                if cat_name:
+                    import uuid
+                    cid = str(uuid.uuid4())
+                    db.execute(
+                        "INSERT INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)",
+                        (cid, cat_name, cat_type, cat_icon)
+                    )
+                    st.session_state["cat_added"] = True
+                    st.rerun()
+
+    # List Existing Categories
+    df_cats = FinanceService.get_categories()
+    if not df_cats.empty:
+        for _, row in df_cats.iterrows():
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.markdown(f"{row['icon']} **{row['name']}** ({row['type']})")
+            with c2:
+                if st.button("🗑️", key=f"del_cat_{row['id']}"):
+                    db.execute("DELETE FROM categories WHERE id = ?", (row['id'],))
+                    st.rerun()

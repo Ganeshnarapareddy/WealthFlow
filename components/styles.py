@@ -144,5 +144,42 @@ def apply_styles():
             background-color: #3b82f6 !important;
             border-radius: 10px;
         }
+
+        /* Center Popup Styles - Robust Centering */
+        .center-popup {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            pointer-events: none !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            z-index: 99999 !important;
+        }
+
+        .center-popup > div {
+            pointer-events: auto !important;
+            width: 90% !important;
+            max-width: 450px !important;
+            background: rgba(15, 23, 42, 0.98) !important;
+            backdrop-filter: blur(25px) !important;
+            border: 2px solid #3b82f6 !important;
+            box-shadow: 0 0 120px rgba(0,0,0,0.95) !important;
+            text-align: center !important;
+            border-radius: 24px !important;
+            padding: 10px !important;
+        }
+        
+        /* Ensure the inner Streamlit notification doesn't have its own fixed positioning */
+        .center-popup [data-testid="stNotification"] {
+            position: relative !important;
+            top: 0 !important;
+            left: 0 !important;
+            transform: none !important;
+            width: 100% !important;
+            margin: 0 !important;
+        }
         </style>
     """, unsafe_allow_html=True)

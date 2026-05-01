@@ -33,30 +33,53 @@ class TursoManager:
         
         ddl = [
             """CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY, username TEXT, email TEXT, 
+                id TEXT PRIMARY KEY, username TEXT, email TEXT,
                 currency TEXT DEFAULT 'USD')""",
             """CREATE TABLE IF NOT EXISTS accounts (
-                id TEXT PRIMARY KEY, user_id TEXT, account_name TEXT, 
+                id TEXT PRIMARY KEY, user_id TEXT, account_name TEXT,
                 balance REAL, account_type TEXT)""",
             """CREATE TABLE IF NOT EXISTS categories (
                 id TEXT PRIMARY KEY, name TEXT, type TEXT, icon TEXT)""",
             """CREATE TABLE IF NOT EXISTS transactions (
-                id TEXT PRIMARY KEY, user_id TEXT, account_id TEXT, 
-                category_id TEXT, amount REAL, type TEXT, 
+                id TEXT PRIMARY KEY, user_id TEXT, account_id TEXT,
+                category_id TEXT, amount REAL, type TEXT,
                 date TEXT, description TEXT)""",
             """CREATE TABLE IF NOT EXISTS budgets (
-                id TEXT PRIMARY KEY, category_id TEXT, 
+                id TEXT PRIMARY KEY, category_id TEXT,
                 amount_limit REAL, month INTEGER, year INTEGER)""",
             """CREATE TABLE IF NOT EXISTS subscriptions (
-                id TEXT PRIMARY KEY, name TEXT, amount REAL, 
-                billing_cycle TEXT, start_date TEXT, 
+                id TEXT PRIMARY KEY, name TEXT, amount REAL,
+                billing_cycle TEXT, start_date TEXT,
                 next_billing_date TEXT, category TEXT, icon TEXT DEFAULT '💳')""",
             """CREATE TABLE IF NOT EXISTS goals (
-                id TEXT PRIMARY KEY, name TEXT, target_amount REAL, 
+                id TEXT PRIMARY KEY, name TEXT, target_amount REAL,
                 current_amount REAL DEFAULT 0, deadline TEXT, icon TEXT)""",
             """CREATE TABLE IF NOT EXISTS assets (
-                id TEXT PRIMARY KEY, name TEXT, type TEXT, 
-                value REAL, user_id TEXT)"""
+                id TEXT PRIMARY KEY, name TEXT, type TEXT,
+                value REAL, user_id TEXT)""",
+            """CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY, value TEXT)""",
+            """CREATE TABLE IF NOT EXISTS loans (
+                id TEXT PRIMARY KEY, person_name TEXT, amount REAL,
+                loan_type TEXT, interest_rate REAL DEFAULT 0,
+                start_date TEXT, due_date TEXT,
+                emi_amount REAL DEFAULT 0, emi_active INTEGER DEFAULT 0,
+                tenure INTEGER DEFAULT 0, emi_start_date TEXT,
+                status TEXT DEFAULT 'pending',
+                remaining_amount REAL, notes TEXT DEFAULT '')""",
+            """CREATE TABLE IF NOT EXISTS loan_payments (
+                id TEXT PRIMARY KEY, loan_id TEXT, due_date TEXT,
+                amount REAL, status TEXT DEFAULT 'pending',
+                paid_date TEXT,
+                FOREIGN KEY (loan_id) REFERENCES loans(id))""",
+            """CREATE TABLE IF NOT EXISTS credit_cards (
+                id TEXT PRIMARY KEY, name TEXT, bank TEXT,
+                card_limit REAL, billing_date INTEGER,
+                closing_date INTEGER, current_balance REAL DEFAULT 0)""",
+            """CREATE TABLE IF NOT EXISTS credit_card_transactions (
+                id TEXT PRIMARY KEY, card_id TEXT, amount REAL,
+                description TEXT, date TEXT, txn_type TEXT,
+                FOREIGN KEY (card_id) REFERENCES credit_cards(id))"""
         ]
         
         for q in ddl:
@@ -64,26 +87,35 @@ class TursoManager:
             
         # Migration for icon in subscriptions
         self.execute("ALTER TABLE subscriptions ADD COLUMN icon TEXT DEFAULT '💳'")
+        
+        # Migration for tenure and emi_start_date in loans
+        self.execute("ALTER TABLE loans ADD COLUMN tenure INTEGER DEFAULT 0")
+        self.execute("ALTER TABLE loans ADD COLUMN emi_start_date TEXT")
             
-        # Seed/Update Categories
-        cats = [
-            ("1", "Housing", "Expense", "🏠"), ("2", "Food", "Expense", "🍱"),
-            ("3", "Transport", "Expense", "🚗"), ("4", "Entertainment", "Expense", "🎬"),
-            ("5", "Healthcare", "Expense", "🏥"), ("6", "Utilities", "Expense", "⚡"),
-            ("7", "Shopping", "Expense", "🛍️"), ("8", "Education", "Expense", "🎓"),
-            ("9", "Tuition Fees", "Expense", "📚"), ("10", "Wellness", "Expense", "🧘"),
-            ("11", "Travel", "Expense", "✈️"), ("12", "Insurance", "Expense", "🛡️"),
-            ("13", "Maintenance", "Expense", "🔧"), ("14", "Subscriptions", "Expense", "💳"),
-            ("15", "Charity", "Expense", "🤝"), ("16", "Personal Care", "Expense", "🧴"),
-            ("17", "Bills", "Expense", "🧾"), ("18", "Others", "Expense", "📁"),
-            ("19", "Salary", "Income", "💰"), ("20", "Investment", "Income", "📈"),
-            ("21", "Gifts", "Income", "🎁"), ("22", "Freelance", "Income", "💻"),
-            ("23", "Bonus", "Income", "🌟"), ("24", "Dividends", "Income", "🎟️"),
-            ("25", "Rental", "Income", "🏠"), ("26", "Business", "Income", "💼"),
-            ("27", "Rebate", "Income", "💸"), ("28", "Other Income", "Income", "💰")
-        ]
-        for c in cats:
-            self.execute("INSERT OR REPLACE INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)", c)
+        # Seed Categories only if table is empty
+        res = self.execute("SELECT COUNT(*) FROM categories")
+        if res and res.rows and res.rows[0][0] == 0:
+            cats = [
+                ("1", "Housing", "Expense", "🏠"), ("2", "Food", "Expense", "🍱"),
+                ("3", "Transport", "Expense", "🚗"), ("4", "Entertainment", "Expense", "🎬"),
+                ("5", "Healthcare", "Expense", "🏥"), ("6", "Utilities", "Expense", "⚡"),
+                ("7", "Shopping", "Expense", "🛍️"), ("8", "Education", "Expense", "🎓"),
+                ("9", "Tuition Fees", "Expense", "📚"), ("10", "Wellness", "Expense", "🧘"),
+                ("11", "Travel", "Expense", "✈️"), ("12", "Insurance", "Expense", "🛡️"),
+                ("13", "Maintenance", "Expense", "🔧"), ("14", "Subscriptions", "Expense", "💳"),
+                ("15", "Charity", "Expense", "🤝"), ("16", "Personal Care", "Expense", "🧴"),
+                ("17", "Bills", "Expense", "🧾"), ("18", "Others", "Expense", "📁"),
+                ("19", "Salary", "Income", "💰"), ("20", "Investment", "Income", "📈"),
+                ("21", "Gifts", "Income", "🎁"), ("22", "Freelance", "Income", "💻"),
+                ("23", "Bonus", "Income", "🌟"), ("24", "Dividends", "Income", "🎟️"),
+                ("25", "Rental", "Income", "🏠"), ("26", "Business", "Income", "💼"),
+                ("27", "Rebate", "Income", "💸"), ("28", "Other Income", "Income", "💰")
+            ]
+            for c in cats:
+                self.execute("INSERT OR IGNORE INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)", c)
+
+        # Seed default settings
+        self.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('fiscal_month_start_day', '1')")
 
         # Ensure default account
         res = self.execute("SELECT COUNT(*) FROM accounts")

@@ -1,6 +1,7 @@
 import pandas as pd
 import uuid
-from datetime import datetime
+import calendar
+from datetime import datetime, timedelta, date
 from database import db
 
 
@@ -90,77 +91,105 @@ class FinanceService:
         return today, yesterday
 
     @staticmethod
-    def get_income_expense_by_month(year=None, month=None):
+    def get_income_expense_by_month(year=None, month=None, fiscal_start_day=None):
         """Get income and expense by month, optionally filtered by year/month."""
-        query = """
-            SELECT SUBSTR(date, 1, 7) as Month,
-                   SUM(CASE WHEN type='Income' THEN amount ELSE 0 END) as Income,
-                   SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END) as Expense
-            FROM transactions
-            WHERE 1=1
-        """
-        params = []
-        if year and year != "All" and month and month != "All":
-            query += " AND date LIKE ?"
-            params.append(f"{year}-{month:02d}%")
-        elif year and year != "All":
-            query += " AND date LIKE ?"
-            params.append(f"{year}%")
-
-        query += " GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC"
-
-        res = db.execute(query, tuple(params))
+        if fiscal_start_day is not None:
+            start_date, end_date = FinanceService.get_fiscal_period(year, month, int(fiscal_start_day))
+            query = """
+                SELECT SUBSTR(date, 1, 7) as Month,
+                       SUM(CASE WHEN type='Income' THEN amount ELSE 0 END) as Income,
+                       SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END) as Expense
+                FROM transactions
+                WHERE date >= ? AND date < ?
+                GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC
+            """
+            res = db.execute(query, (start_date, end_date))
+        else:
+            query = """
+                SELECT SUBSTR(date, 1, 7) as Month,
+                       SUM(CASE WHEN type='Income' THEN amount ELSE 0 END) as Income,
+                       SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END) as Expense
+                FROM transactions
+                WHERE 1=1
+            """
+            params = []
+            if year and year != "All" and month and month != "All":
+                query += " AND date LIKE ?"
+                params.append(f"{year}-{month:02d}%")
+            elif year and year != "All":
+                query += " AND date LIKE ?"
+                params.append(f"{year}%")
+            query += " GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC"
+            res = db.execute(query, tuple(params))
         if res and res.rows:
             df = pd.DataFrame(res.rows, columns=["Month", "Income", "Expense"])
             return df.iloc[::-1]
         return pd.DataFrame(columns=["Month", "Income", "Expense"])
 
     @staticmethod
-    def get_spending_trend(year=None, month=None, months=12):
+    def get_spending_trend(year=None, month=None, months=12, fiscal_start_day=None):
         """Get monthly spending trend, optionally filtered by year/month."""
-        query = """
-            SELECT SUBSTR(date, 1, 7) as Month, SUM(amount) as Amount
-            FROM transactions
-            WHERE type='Expense'
-        """
-        params = []
-        if year and year != "All" and month and month != "All":
-            query += " AND date LIKE ?"
-            params.append(f"{year}-{month:02d}%")
-        elif year and year != "All":
-            query += " AND date LIKE ?"
-            params.append(f"{year}%")
-
-        query += " GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC"
-
-        if year == "All" and month == "All":
-            query += " LIMIT ?"
-            params.append(months)
-
-        res = db.execute(query, tuple(params))
+        if fiscal_start_day is not None:
+            start_date, end_date = FinanceService.get_fiscal_period(year, month, int(fiscal_start_day))
+            query = """
+                SELECT SUBSTR(date, 1, 7) as Month, SUM(amount) as Amount
+                FROM transactions
+                WHERE type='Expense' AND date >= ? AND date < ?
+                GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC
+                LIMIT ?
+            """
+            res = db.execute(query, (start_date, end_date, months))
+        else:
+            query = """
+                SELECT SUBSTR(date, 1, 7) as Month, SUM(amount) as Amount
+                FROM transactions
+                WHERE type='Expense'
+            """
+            params = []
+            if year and year != "All" and month and month != "All":
+                query += " AND date LIKE ?"
+                params.append(f"{year}-{month:02d}%")
+            elif year and year != "All":
+                query += " AND date LIKE ?"
+                params.append(f"{year}%")
+            query += " GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC"
+            if year == "All" and month == "All":
+                query += " LIMIT ?"
+                params.append(months)
+            res = db.execute(query, tuple(params))
         if res and res.rows:
             df = pd.DataFrame(res.rows, columns=["Month", "Amount"])
             return df.iloc[::-1]
         return pd.DataFrame(columns=["Month", "Amount"])
 
     @staticmethod
-    def get_spending_by_category(year=None, month=None):
-        query = """
-            SELECT COALESCE(c.name, 'Other') as Category, SUM(t.amount) as Amount
-            FROM transactions t
-            LEFT JOIN categories c ON t.category_id = c.id
-            WHERE t.type = 'Expense'
-        """
-        params = []
-        if year and year != "All" and month and month != "All":
-            query += " AND t.date LIKE ?"
-            params.append(f"{year}-{month:02d}%")
-        elif year and year != "All":
-            query += " AND t.date LIKE ?"
-            params.append(f"{year}%")
-
-        query += " GROUP BY c.name ORDER BY Amount DESC"
-        res = db.execute(query, tuple(params))
+    def get_spending_by_category(year=None, month=None, fiscal_start_day=None):
+        if fiscal_start_day is not None:
+            start_date, end_date = FinanceService.get_fiscal_period(year, month, int(fiscal_start_day))
+            query = """
+                SELECT COALESCE(c.name, 'Other') as Category, SUM(t.amount) as Amount
+                FROM transactions t
+                LEFT JOIN categories c ON t.category_id = c.id
+                WHERE t.type = 'Expense' AND t.date >= ? AND t.date < ?
+                GROUP BY c.name ORDER BY Amount DESC
+            """
+            res = db.execute(query, (start_date, end_date))
+        else:
+            query = """
+                SELECT COALESCE(c.name, 'Other') as Category, SUM(t.amount) as Amount
+                FROM transactions t
+                LEFT JOIN categories c ON t.category_id = c.id
+                WHERE t.type = 'Expense'
+            """
+            params = []
+            if year and year != "All" and month and month != "All":
+                query += " AND t.date LIKE ?"
+                params.append(f"{year}-{month:02d}%")
+            elif year and year != "All":
+                query += " AND t.date LIKE ?"
+                params.append(f"{year}%")
+            query += " GROUP BY c.name ORDER BY Amount DESC"
+            res = db.execute(query, tuple(params))
         if res and res.rows:
             return pd.DataFrame(res.rows, columns=["Category", "Amount"])
         return pd.DataFrame(columns=["Category", "Amount"])
@@ -201,33 +230,38 @@ class FinanceService:
         return [(datetime.now().year, datetime.now().month)]
 
     @staticmethod
-    def get_period_data(year, month):
+    def get_period_data(year, month, fiscal_start_day=None):
         """
         Get income and expense for a specific period.
         Returns: (income, expense)
+        If fiscal_start_day is set, uses date-range queries for fiscal period.
         """
-        params = []
-        where = "WHERE 1=1"
-
-        if year != "All" and month != "All":
-            where += " AND date LIKE ?"
-            params.append(f"{year}-{month:02d}%")
-        elif year != "All" and month == "All":
-            where += " AND date LIKE ?"
-            params.append(f"{year}%")
-
-        query_inc = "SELECT COALESCE(SUM(amount), 0) FROM transactions " + where + " AND type='Income'"
-        query_exp = "SELECT COALESCE(SUM(amount), 0) FROM transactions " + where + " AND type='Expense'"
-
-        res_inc = db.execute(query_inc, tuple(params))
-        res_exp = db.execute(query_exp, tuple(params))
+        if fiscal_start_day is not None:
+            start_date, end_date = FinanceService.get_fiscal_period(year, month, int(fiscal_start_day))
+            query_inc = "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type='Income' AND date >= ? AND date < ?"
+            query_exp = "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type='Expense' AND date >= ? AND date < ?"
+            res_inc = db.execute(query_inc, (start_date, end_date))
+            res_exp = db.execute(query_exp, (start_date, end_date))
+        else:
+            params = []
+            where = "WHERE 1=1"
+            if year != "All" and month != "All":
+                where += " AND date LIKE ?"
+                params.append(f"{year}-{month:02d}%")
+            elif year != "All" and month == "All":
+                where += " AND date LIKE ?"
+                params.append(f"{year}%")
+            query_inc = "SELECT COALESCE(SUM(amount), 0) FROM transactions " + where + " AND type='Income'"
+            query_exp = "SELECT COALESCE(SUM(amount), 0) FROM transactions " + where + " AND type='Expense'"
+            res_inc = db.execute(query_inc, tuple(params))
+            res_exp = db.execute(query_exp, tuple(params))
 
         income = float(res_inc.rows[0][0]) if res_inc and res_inc.rows and res_inc.rows[0][0] else 0.0
         expense = float(res_exp.rows[0][0]) if res_exp and res_exp.rows and res_exp.rows[0][0] else 0.0
         return income, expense
 
     @staticmethod
-    def get_previous_period_data(year, month):
+    def get_previous_period_data(year, month, fiscal_start_day=None):
         """
         Get the previous period's data for comparison.
         Returns: (prev_income, prev_expense, prev_label)
@@ -255,18 +289,36 @@ class FinanceService:
             return 0.0, 0.0, "N/A"
 
         elif year != "All" and month == "All":
-            prev_year = year - 1
-            data = FinanceService.get_period_data(prev_year, "All")
-            return (data[0], data[1], f"{prev_year}")
+            if fiscal_start_day is not None:
+                # Previous fiscal year: same month 12 of previous year
+                prev_year = year - 1
+                prev_month = 12
+                data = FinanceService.get_period_data(prev_year, prev_month, fiscal_start_day)
+                return (data[0], data[1], f"{prev_year}-{prev_month:02d}")
+            else:
+                prev_year = year - 1
+                data = FinanceService.get_period_data(prev_year, "All")
+                return (data[0], data[1], f"{prev_year}")
 
         elif year != "All" and month != "All":
-            prev_month = month - 1
-            prev_year = year
-            if prev_month == 0:
-                prev_month = 12
-                prev_year = year - 1
-            data = FinanceService.get_period_data(prev_year, prev_month)
-            return (data[0], data[1], f"{prev_year}-{prev_month:02d}")
+            if fiscal_start_day is not None:
+                # Previous fiscal period: subtract 1 month
+                prev_month = month - 1
+                prev_year = year
+                if prev_month == 0:
+                    prev_month = 12
+                    prev_year = year - 1
+                data = FinanceService.get_period_data(prev_year, prev_month, fiscal_start_day)
+                label = FinanceService.get_fiscal_month_label(prev_year, prev_month, int(fiscal_start_day))
+                return (data[0], data[1], label)
+            else:
+                prev_month = month - 1
+                prev_year = year
+                if prev_month == 0:
+                    prev_month = 12
+                    prev_year = year - 1
+                data = FinanceService.get_period_data(prev_year, prev_month)
+                return (data[0], data[1], f"{prev_year}-{prev_month:02d}")
 
         return 0.0, 0.0, "N/A"
 
@@ -291,24 +343,24 @@ class FinanceService:
         return f"{sign}{pct:.1f}% ({sign}{diff:,.0f})", pct > 0
 
     @staticmethod
-    def get_savings_rate():
-        """Calculate savings rate for current month: (Income - Expense) / Income * 100."""
-        inc, exp = FinanceService.get_monthly_income_vs_expense()
+    def get_savings_rate(fiscal_start_day=None):
+        """Calculate savings rate for current period: (Income - Expense) / Income * 100."""
+        inc, exp = FinanceService.get_monthly_income_vs_expense(fiscal_start_day=fiscal_start_day)
         if inc > 0:
             return ((inc - exp) / inc) * 100
         return 0.0
 
     @staticmethod
-    def get_top_spending_category(year=None, month=None):
+    def get_top_spending_category(year=None, month=None, fiscal_start_day=None):
         """Get the top spending category for a given period."""
-        df = FinanceService.get_spending_by_category(year, month)
+        df = FinanceService.get_spending_by_category(year, month, fiscal_start_day)
         if not df.empty:
             top = df.iloc[0]
             return top['Category'], top['Amount']
         return None, 0.0
 
     @staticmethod
-    def get_top_category_comparison(year, month):
+    def get_top_category_comparison(year, month, fiscal_start_day=None):
         """
         Get top category comparison with previous period.
         Returns: (cat, amt, prev_amt, delta_str, is_increase)
@@ -319,7 +371,7 @@ class FinanceService:
         if month is None:
             month = "All"
 
-        cat, amt = FinanceService.get_top_spending_category(year, month)
+        cat, amt = FinanceService.get_top_spending_category(year, month, fiscal_start_day)
 
         if year == "All" and month == "All":
             query = """
@@ -348,7 +400,7 @@ class FinanceService:
 
         elif year != "All" and month == "All":
             prev_year = year - 1
-            prev_cat, prev_amt = FinanceService.get_top_spending_category(prev_year, "All")
+            prev_cat, prev_amt = FinanceService.get_top_spending_category(prev_year, "All", fiscal_start_day)
             delta_str, is_increase = FinanceService.get_comparison_delta(amt, prev_amt)
             return cat, amt, prev_amt, delta_str, is_increase
 
@@ -358,31 +410,104 @@ class FinanceService:
             if prev_month == 0:
                 prev_month = 12
                 prev_year = year - 1
-            prev_cat, prev_amt = FinanceService.get_top_spending_category(prev_year, prev_month)
+            prev_cat, prev_amt = FinanceService.get_top_spending_category(prev_year, prev_month, fiscal_start_day)
             delta_str, is_increase = FinanceService.get_comparison_delta(amt, prev_amt)
             return cat, amt, prev_amt, delta_str, is_increase
 
         return cat, amt, 0.0, None, False
 
     @staticmethod
-    def get_monthly_income_vs_expense(year=None, month=None):
-        """Returns total income and total expense for the given year/month."""
-        if year and month and year != "All" and month != "All":
+    def get_setting(key, default=None):
+        """Read a key from settings table, return default if not found."""
+        res = db.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        if res and res.rows and res.rows[0][0]:
+            return res.rows[0][0]
+        return default
+
+    @staticmethod
+    def set_setting(key, value):
+        """Upsert a key-value pair in settings table."""
+        db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+
+    @staticmethod
+    def _add_months_to_date(year, month, day, months):
+        """Add months to a (year, month, day) tuple, return (new_year, new_month, clamped_day)."""
+        m = (month + months - 1) % 12 + 1
+        y = year + (month + months - 1) // 12
+        max_day = calendar.monthrange(y, m)[1]
+        adjusted_day = min(day, max_day)
+        return y, m, adjusted_day
+
+    @staticmethod
+    def get_fiscal_period(year, month, start_day):
+        """
+        Get fiscal period start/end dates.
+        Returns: (start_date_str, end_date_str) e.g., ('2026-04-28', '2026-05-28')
+        """
+        start_date = f"{year}-{month:02d}-{start_day:02d}"
+        y, m, d = FinanceService._add_months_to_date(year, month, start_day, 1)
+        end_date = f"{y}-{m:02d}-{d:02d}"
+        return start_date, end_date
+
+    @staticmethod
+    def get_fiscal_month_label(year, month, start_day):
+        """Return display label like 'Apr 28 - May 27' for fiscal period."""
+        start_day_actual = min(start_day, calendar.monthrange(year, month)[1])
+        y1, m1, d1 = year, month, start_day_actual
+        y2, m2, d2 = FinanceService._add_months_to_date(year, month, start_day_actual, 1)
+        end_minus_one = date(y2, m2, d2) - timedelta(days=1)
+        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        return f"{months[m1-1]} {d1} - {months[m2-1]} {end_minus_one.day}"
+
+    @staticmethod
+    def get_monthly_income_vs_expense(year=None, month=None, fiscal_start_day=None):
+        """
+        Returns total income and total expense for the given year/month.
+        If fiscal_start_day is set, uses fiscal period date range.
+        """
+        if fiscal_start_day is not None:
+            fiscal_start_day = int(fiscal_start_day)
+            start_date, end_date = FinanceService.get_fiscal_period(year, month, fiscal_start_day)
+            res_inc = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Income' AND date >= ? AND date < ?",
+                (start_date, end_date),
+            )
+            res_exp = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Expense' AND date >= ? AND date < ?",
+                (start_date, end_date),
+            )
+        elif year and month and year != "All" and month != "All":
             pattern = f"{year}-{month:02d}%"
+            res_inc = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Income' AND date LIKE ?",
+                (pattern,),
+            )
+            res_exp = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Expense' AND date LIKE ?",
+                (pattern,),
+            )
         elif year and year != "All":
             pattern = f"{year}%"
+            res_inc = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Income' AND date LIKE ?",
+                (pattern,),
+            )
+            res_exp = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Expense' AND date LIKE ?",
+                (pattern,),
+            )
         else:
             now = datetime.now()
             pattern = f"{now.year}-{now.month:02d}%"
-
-        res_inc = db.execute(
-            "SELECT SUM(amount) FROM transactions WHERE type='Income' AND date LIKE ?",
-            (pattern,),
-        )
-        res_exp = db.execute(
-            "SELECT SUM(amount) FROM transactions WHERE type='Expense' AND date LIKE ?",
-            (pattern,),
-        )
+            res_inc = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Income' AND date LIKE ?",
+                (pattern,),
+            )
+            res_exp = db.execute(
+                "SELECT SUM(amount) FROM transactions WHERE type='Expense' AND date LIKE ?",
+                (pattern,),
+            )
         income = float(res_inc.rows[0][0]) if res_inc and res_inc.rows and res_inc.rows[0][0] else 0.0
         expense = float(res_exp.rows[0][0]) if res_exp and res_exp.rows and res_exp.rows[0][0] else 0.0
         return income, expense
