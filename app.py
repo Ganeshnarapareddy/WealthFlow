@@ -34,6 +34,9 @@ if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
 if 'show_menu' not in st.session_state: st.session_state['show_menu'] = False
 if 'delete_confirm' not in st.session_state: st.session_state['delete_confirm'] = {}
 if 'sub_added' not in st.session_state: st.session_state['sub_added'] = False
+if 'budget_added' not in st.session_state: st.session_state['budget_added'] = False
+if 'goal_added' not in st.session_state: st.session_state['goal_added'] = False
+if 'asset_added' not in st.session_state: st.session_state['asset_added'] = False
 
 apply_styles()
 
@@ -379,6 +382,9 @@ elif page == "Transactions":
 
 elif page == "Budgets":
     st.markdown('<h1 class="main-header">Guardrails</h1>', unsafe_allow_html=True)
+    if st.session_state.get('budget_added'):
+        st.success("Budget added!")
+        st.session_state['budget_added'] = False
     with st.expander("➕ Set New Budget"):
         with st.form("new_budget"):
             all_cats = FinanceService.get_categories()
@@ -388,6 +394,7 @@ elif page == "Budgets":
             limit = st.number_input("Monthly Limit", min_value=0.01, value=None, placeholder="Enter limit")
             if st.form_submit_button("Lock Budget"):
                 BudgetService.add_budget(cat_opts[sel_cat], limit, datetime.now().month, datetime.now().year)
+                st.session_state['budget_added'] = True
                 st.rerun()
     df_b = BudgetService.get_monthly_budgets()
     if not df_b.empty:
@@ -438,6 +445,9 @@ elif page == "Subscriptions":
 
 elif page == "Goals":
     st.markdown('<h1 class="main-header">Piggy Bank</h1>', unsafe_allow_html=True)
+    if st.session_state.get('goal_added'):
+        st.success("Goal created!")
+        st.session_state['goal_added'] = False
     with st.expander("➕ Create New Goal"):
         with st.form("new_goal"):
             gname = st.text_input("Saving for…")
@@ -446,6 +456,7 @@ elif page == "Goals":
             icon = st.text_input("Emoji Logo", value="🎯")
             if st.form_submit_button("Create Goal"):
                 GoalService.add_goal(gname, target, deadline, icon)
+                st.session_state['goal_added'] = True
                 st.rerun()
     df_g = GoalService.get_goals()
     if not df_g.empty:
@@ -469,6 +480,9 @@ elif page == "Goals":
 
 elif page == "Assets":
     st.markdown('<h1 class="main-header">Wealth Portfolio</h1>', unsafe_allow_html=True)
+    if st.session_state.get('asset_added'):
+        st.success("Asset added!")
+        st.session_state['asset_added'] = False
     if st.session_state['edit_asset_id']:
         df_a = AssetService.get_assets()
         asset_to_edit = df_a[df_a['id'] == st.session_state['edit_asset_id']].iloc[0]
@@ -492,6 +506,7 @@ elif page == "Assets":
                 aval = st.number_input("Current Value", min_value=0.01, value=None, placeholder="Enter value")
                 if st.form_submit_button("Add Asset"):
                     AssetService.add_asset(aname, atype, aval)
+                    st.session_state['asset_added'] = True
                     st.rerun()
     df_a = AssetService.get_assets()
     if not df_a.empty:
