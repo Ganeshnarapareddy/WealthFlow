@@ -249,21 +249,21 @@ if page == "Dashboard":
                         delta_color="inverse")
     with m3: card_metric("Monthly Income", fmt(inc),
                         delta=inc_delta_str,
-                        delta_color="normal" if inc_increased else "inverse")
+                        delta_color="normal")
     with m4: card_metric("Monthly Spent", fmt(exp),
                         delta=exp_delta_str,
-                        delta_color="inverse" if exp_increased else "normal")
+                        delta_color="inverse")
 
     # Second row - Additional Analytics
     a1, a2, a3 = st.columns([1, 1, 1])
     with a1: card_metric("Savings Rate", f"{savings_rate:.1f}%",
                          delta=sr_delta_str,
-                         delta_color="normal" if sr_increased else "inverse")
+                         delta_color="normal")
     with a2: card_metric("Top Category", top_cat if top_cat else "N/A",
                          delta=top_delta_str)
     with a3: card_metric("Subscriptions", fmt(burn) if burn > 0 else "N/A",
                          delta=burn_delta_str,
-                         delta_color="inverse" if burn_increased else "normal")
+                         delta_color="inverse")
 
     # Smart Alerts Section
     st.markdown("### 🔔 Smart Alerts")
