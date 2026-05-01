@@ -79,14 +79,25 @@ class TursoManager:
             """CREATE TABLE IF NOT EXISTS credit_card_transactions (
                 id TEXT PRIMARY KEY, card_id TEXT, amount REAL,
                 description TEXT, date TEXT, txn_type TEXT,
-                FOREIGN KEY (card_id) REFERENCES credit_cards(id))"""
+                linked_txn_id TEXT,
+                FOREIGN KEY (card_id) REFERENCES credit_cards(id))""",
+            """CREATE TABLE IF NOT EXISTS credit_card_emis (
+                id TEXT PRIMARY KEY, card_id TEXT, description TEXT,
+                total_amount REAL, monthly_amount REAL, tenure INTEGER,
+                start_date TEXT, status TEXT DEFAULT 'active',
+                FOREIGN KEY (card_id) REFERENCES credit_cards(id))""",
+            """CREATE TABLE IF NOT EXISTS credit_card_emi_payments (
+                id TEXT PRIMARY KEY, emi_id TEXT, due_date TEXT,
+                amount REAL, status TEXT DEFAULT 'pending',
+                paid_date TEXT,
+                FOREIGN KEY (emi_id) REFERENCES credit_card_emis(id))"""
         ]
         
         for q in ddl:
             self.execute(q)
             
-        # Migration for icon in subscriptions
-        self.execute("ALTER TABLE subscriptions ADD COLUMN icon TEXT DEFAULT '💳'")
+        # Migration for CC linking
+        self.execute("ALTER TABLE credit_card_transactions ADD COLUMN linked_txn_id TEXT")
         
         # Migration for tenure and emi_start_date in loans
         self.execute("ALTER TABLE loans ADD COLUMN tenure INTEGER DEFAULT 0")

@@ -48,6 +48,8 @@ if 'card_txn_added' not in st.session_state: st.session_state['card_txn_added'] 
 if 'edit_loan_id' not in st.session_state: st.session_state['edit_loan_id'] = None
 if 'edit_card_id' not in st.session_state: st.session_state['edit_card_id'] = None
 if 'cat_added' not in st.session_state: st.session_state['cat_added'] = False
+if 'txn_deleted' not in st.session_state: st.session_state['txn_deleted'] = False
+if 'card_txn_deleted' not in st.session_state: st.session_state['card_txn_deleted'] = False
 if 'loan_given_version' not in st.session_state: st.session_state['loan_given_version'] = 0
 if 'loan_taken_version' not in st.session_state: st.session_state['loan_taken_version'] = 0
 if 'card_add_version' not in st.session_state: st.session_state['card_add_version'] = 0
@@ -103,6 +105,7 @@ def render_delete_button(item_id, button_key, delete_func, item_name="item"):
                 # Set delete flag for popup
                 if "cdel_" in button_key: st.session_state['card_deleted'] = True
                 elif "ldel_" in button_key or "del_loan_" in button_key: st.session_state['loan_deleted'] = True
+                elif "del_c_txn_" in button_key: st.session_state['card_txn_deleted'] = True
                 st.rerun()
         with c2:
             if st.button("❌ No", key=f"no_{item_id}"):
@@ -496,10 +499,32 @@ elif page == "Transactions":
     with t2:
         df_hist = FinanceService.get_recent_transactions(100)
         if not df_hist.empty:
-            disp_df = df_hist.copy()
-            disp_df['Amount'] = disp_df.apply(lambda r: f"{-r['Amount']:,.2f}" if r['Type']=='Expense' else f"{r['Amount']:,.2f}", axis=1)
-            st.dataframe(disp_df[['Date', 'Icon', 'Description', 'Category', 'Amount']], use_container_width=True, hide_index=True)
+            for _, row in df_hist.iterrows():
+                c1, c2, c3 = st.columns([1, 4, 1])
+                with c1: st.markdown(f"### {row['Icon']}")
+                with c2:
+                    st.markdown(f"**{row['Description']}**")
+                    color = "#f87171" if row['Type'] == 'Expense' else "#4ade80"
+                    sign = "-" if row['Type'] == 'Expense' else "+"
+                    st.markdown(f"<span style='color:{color}; font-weight:bold;'>{sign}{fmt(row['Amount'])}</span> • {row['Category']} • {row['Date']}", unsafe_allow_html=True)
+                with c3:
+                    if st.button("🗑️", key=f"del_txn_{row['ID']}_{row['Source']}"):
+                        if row['Source'] == 'main':
+                            FinanceService.delete_transaction(row['ID'])
+                            st.session_state['txn_deleted'] = True
+                        else:
+                            CreditCardService.delete_transaction(row['ID'])
+                            st.session_state['card_txn_deleted'] = True
+                        st.rerun()
+                st.divider()
         else: empty_state("No History", "Log transactions to see them here.")
+
+    # Centered Popup for deletion
+    if st.session_state.get('txn_deleted'):
+        st.markdown('<div class="center-popup">', unsafe_allow_html=True)
+        st.info("Transaction revoked and balance restored.")
+        st.session_state['txn_deleted'] = False
+        st.markdown('</div>', unsafe_allow_html=True)
 
 elif page == "Budgets":
     st.markdown('<h1 class="main-header">Guardrails</h1>', unsafe_allow_html=True)
@@ -852,11 +877,14 @@ elif page == "Credit Cards":
                 c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
                 with c1:
                     limit_val = card['card_limit'] if card['card_limit'] is not None else 0.0
-                    balance_val = card['current_balance'] if card['current_balance'] is not None else 0.0
+                    total_out = CreditCardService.get_card_total_outstanding(card['id'])
+                    avail = CreditCardService.get_card_available_limit(card['id'])
+                    
                     st.markdown(f"**Limit:** {fmt(limit_val)}")
-                    st.markdown(f"**Outstanding:** {fmt(balance_val)}")
-                    avail = limit_val + balance_val
-                    st.markdown(f"**Available:** {fmt(avail)}")
+                    st.markdown(f"<span style='color:#f87171;'>**Outstanding:** {fmt(total_out)}</span>", unsafe_allow_html=True)
+                    
+                    color = "#4ade80" if avail > 0 else "#f87171"
+                    st.markdown(f"<span style='color:{color};'>**Available:** {fmt(avail)}</span>", unsafe_allow_html=True)
                 with c2:
                     st.markdown(f"**Billing Day:** {card['billing_date']}")
                 with c3:
@@ -867,41 +895,121 @@ elif page == "Credit Cards":
                     render_delete_button(card['id'], f"cdel_{card['id']}", CreditCardService.delete_card, card['name'])
 
                 # Add transaction form
-                st.markdown("**Transactions**")
-                txn_tab1, txn_tab2 = st.tabs(["➕ Add Expense", "➕ Add Payment"])
+                st.markdown("**Transactions & EMIs**")
+                txn_tab1, txn_tab2, txn_tab3 = st.tabs(["➕ Add Expense", "➕ Add Payment", "➕ Add EMI"])
                 with txn_tab1:
-                    with st.form(f"card_exp_{card['id']}"):
+                    with st.form(f"card_exp_{card['id']}", clear_on_submit=True):
                         exp_desc = st.text_input("Description", key=f"exp_desc_{card['id']}")
                         exp_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"exp_amt_{card['id']}")
+                        exp_date = st.date_input("Date", value=datetime.now().date(), key=f"exp_date_{card['id']}")
                         if st.form_submit_button("Record Expense"):
                             if exp_amt and exp_amt > 0:
-                                CreditCardService.add_transaction(card['id'], exp_amt, exp_desc, 'expense')
+                                full_dt = datetime.combine(exp_date, datetime.now().time()).strftime("%Y-%m-%d %H:%M")
+                                CreditCardService.add_transaction(card['id'], exp_amt, exp_desc, 'expense', txn_date=full_dt)
                                 st.session_state['card_txn_added'] = True
                                 st.rerun()
                 with txn_tab2:
-                    with st.form(f"card_pay_{card['id']}"):
+                    with st.form(f"card_pay_{card['id']}", clear_on_submit=True):
                         pay_desc = st.text_input("Description", key=f"pay_desc_{card['id']}")
                         pay_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"pay_amt_{card['id']}")
+                        pay_date = st.date_input("Date", value=datetime.now().date(), key=f"pay_date_{card['id']}")
+                        sync_bank = st.checkbox("Deduct from Main Bank Account", value=True, key=f"sync_bank_{card['id']}")
                         if st.form_submit_button("Record Payment"):
                             if pay_amt and pay_amt > 0:
-                                CreditCardService.add_transaction(card['id'], pay_amt, pay_desc, 'payment')
+                                full_dt = datetime.combine(pay_date, datetime.now().time()).strftime("%Y-%m-%d %H:%M")
+                                CreditCardService.add_transaction(card['id'], pay_amt, pay_desc, 'payment', txn_date=full_dt, sync_bank=sync_bank)
                                 st.session_state['card_txn_added'] = True
                                 st.rerun()
+                
+                with txn_tab3:
+                    with st.form(f"card_emi_{card['id']}", clear_on_submit=True):
+                        emi_desc = st.text_input("EMI Description", placeholder="e.g. iPhone 15 Pro", key=f"emi_desc_{card['id']}")
+                        emi_total = st.number_input("Total Amount", min_value=0.01, value=None, key=f"emi_total_{card['id']}")
+                        emi_monthly = st.number_input("Monthly Installment", min_value=0.01, value=None, key=f"emi_monthly_{card['id']}")
+                        emi_tenure = st.number_input("Tenure (Months)", min_value=1, step=1, value=None, key=f"emi_tenure_{card['id']}")
+                        emi_date = st.date_input("Start Date", value=datetime.now().date(), key=f"emi_start_{card['id']}")
+                        if st.form_submit_button("Start EMI Plan"):
+                            if emi_total and emi_monthly and emi_tenure:
+                                CreditCardService.add_emi(card['id'], emi_desc, emi_total, emi_monthly, emi_tenure, str(emi_date))
+                                st.session_state['card_txn_added'] = True
+                                st.rerun()
+
+                # List active EMIs
+                df_emis = CreditCardService.get_card_emis(card['id'])
+                if not df_emis.empty:
+                    st.markdown("### 🗓️ Active EMIs")
+                    for _, emi in df_emis.iterrows():
+                        with st.expander(f"📌 {emi['Description']} ({fmt(emi['Monthly'])}/mo)"):
+                            ec1, ec2 = st.columns([3, 1])
+                            with ec1:
+                                st.write(f"Total: **{fmt(emi['Total'])}** | Tenure: **{emi['Tenure']} months**")
+                            with ec2:
+                                if st.button("🗑️ Revoke EMI", key=f"del_emi_{emi['id']}"):
+                                    CreditCardService.delete_emi(emi['id'])
+                                    st.rerun()
+                            
+                            # Show payments
+                            df_p = CreditCardService.get_emi_payments(emi['id'])
+                            if not df_p.empty:
+                                for _, p in df_p.iterrows():
+                                    pc1, pc2, pc3 = st.columns([2, 2, 1])
+                                    with pc1: st.write(p['Date'])
+                                    with pc2: 
+                                        st.write(fmt(p['Amount']))
+                                        if p['Status'] == 'paid':
+                                            st.caption(f"✅ Paid on {p['Paid Date']}")
+                                    with pc3:
+                                        if p['Status'] == 'pending':
+                                            if st.button("Mark Paid", key=f"pay_emi_p_{p['id']}"):
+                                                CreditCardService.mark_emi_paid(p['id'])
+                                                st.rerun()
+                                    st.divider()
 
                 # List recent transactions
                 df_txns = CreditCardService.get_card_transactions(card['id'])
                 if df_txns.empty:
                     st.info("No transactions yet.")
                 else:
-                    st.dataframe(
-                        df_txns[['date', 'description', 'amount', 'txn_type']],
-                        use_container_width=True, hide_index=True
-                    )
+                    for _, row in df_txns.iterrows():
+                        c1, c2, c3 = st.columns([4, 2, 1])
+                        with c1:
+                            st.markdown(f"**{row['description']}**")
+                            st.caption(f"{row['date']}")
+                        with c2:
+                            color = "#f87171" if row['txn_type'] == 'expense' else "#4ade80"
+                            sign = "-" if row['txn_type'] == 'expense' else "+"
+                            st.markdown(f"<span style='color:{color}; font-weight:bold;'>{sign}{fmt(row['amount'])}</span>", unsafe_allow_html=True)
+                        with c3:
+                            # Direct confirmation for CC transactions for reliability
+                            btn_key = f"del_c_txn_{row['id']}"
+                            conf_key = f"conf_del_{row['id']}"
+                            
+                            if conf_key not in st.session_state:
+                                st.session_state[conf_key] = False
+                                
+                            if not st.session_state[conf_key]:
+                                if st.button("🗑️", key=btn_key):
+                                    st.session_state[conf_key] = True
+                                    st.rerun()
+                            else:
+                                st.markdown("🗑️ **Delete?**")
+                                cy, cn = st.columns(2)
+                                with cy:
+                                    if st.button("✅", key=f"y_{row['id']}", help="Confirm Delete"):
+                                        CreditCardService.delete_transaction(row['id'], description=row['description'], amount=row['amount'])
+                                        st.session_state[conf_key] = False
+                                        st.session_state['card_txn_deleted'] = True
+                                        st.rerun()
+                                with cn:
+                                    if st.button("❌", key=f"n_{row['id']}", help="Cancel"):
+                                        st.session_state[conf_key] = False
+                                        st.rerun()
+                        st.divider()
     else:
         empty_state("No Credit Cards", "Add your first credit card to start tracking.")
 
     # Success Popups centered
-    if st.session_state.get('card_added') or st.session_state.get('card_deleted') or st.session_state.get('card_txn_added'):
+    if st.session_state.get('card_added') or st.session_state.get('card_deleted') or st.session_state.get('card_txn_added') or st.session_state.get('card_txn_deleted'):
         st.markdown('<div class="center-popup">', unsafe_allow_html=True)
         if st.session_state.get('card_added'):
             st.success("Credit Card added!")
@@ -912,6 +1020,9 @@ elif page == "Credit Cards":
         if st.session_state.get('card_txn_added'):
             st.success("Transaction recorded!")
             st.session_state['card_txn_added'] = False
+        if st.session_state.get('card_txn_deleted'):
+            st.info("Transaction revoked.")
+            st.session_state['card_txn_deleted'] = False
         st.markdown('</div>', unsafe_allow_html=True)
 
 elif page == "Goals":

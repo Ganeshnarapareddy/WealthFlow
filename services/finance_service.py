@@ -38,30 +38,50 @@ class FinanceService:
                 "UPDATE accounts SET balance = balance + ? WHERE id = ?",
                 (adj, "default_account"),
             )
-        except Exception as e:
-            print(f"Error adding transaction: {e}")
-            raise
+            return tid
+        except Exception:
+            return None
+
+    @staticmethod
+    def delete_transaction(tid):
+        """Delete a transaction and reverse its balance impact."""
+        res = db.execute("SELECT amount, type, account_id FROM transactions WHERE id = ?", (tid,))
+        if res and res.rows:
+            amount, txn_type, account_id = res.rows[0]
+            # Reverse balance
+            adj = -amount if txn_type == "Income" else amount
+            db.execute("UPDATE accounts SET balance = balance + ? WHERE id = ?", (adj, account_id))
+            db.execute("DELETE FROM transactions WHERE id = ?", (tid,))
 
     @staticmethod
     def get_recent_transactions(limit=50):
         query = """
-            SELECT t.date, t.description, t.amount,
-                   COALESCE(c.name, 'Other') AS category,
-                   COALESCE(c.icon, '❔')    AS icon,
-                   COALESCE(t.type, 'Expense') AS type
-            FROM transactions t
-            LEFT JOIN categories c ON t.category_id = c.id
-            ORDER BY t.date DESC
+            SELECT id, date, description, amount, category, icon, type, source FROM (
+                SELECT t.id, t.date, t.description, t.amount,
+                       COALESCE(c.name, 'Other') AS category,
+                       COALESCE(c.icon, '❔')    AS icon,
+                       COALESCE(t.type, 'Expense') AS type,
+                       'main' as source
+                FROM transactions t
+                LEFT JOIN categories c ON t.category_id = c.id
+                UNION ALL
+                SELECT ct.id, ct.date, ct.description, ct.amount,
+                       'Credit Card' as category, '💳' as icon, 'Expense' as type,
+                       'credit_card' as source
+                FROM credit_card_transactions ct
+                WHERE ct.txn_type = 'expense'
+            )
+            ORDER BY date DESC
             LIMIT ?
         """
         res = db.execute(query, (limit,))
         if res and res.rows:
             return pd.DataFrame(
                 res.rows,
-                columns=["Date", "Description", "Amount", "Category", "Icon", "Type"],
+                columns=["ID", "Date", "Description", "Amount", "Category", "Icon", "Type", "Source"],
             )
         return pd.DataFrame(
-            columns=["Date", "Description", "Amount", "Category", "Icon", "Type"]
+            columns=["ID", "Date", "Description", "Amount", "Category", "Icon", "Type", "Source"]
         )
 
     @staticmethod
@@ -78,13 +98,24 @@ class FinanceService:
     def get_today_vs_yesterday():
         today_str = datetime.now().strftime("%Y-%m-%d")
         yesterday_str = (datetime.now() - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        # Combined query for Today
         res_today = db.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type='Expense' AND date LIKE ?",
-            (f"{today_str}%",)
+            """SELECT COALESCE(SUM(amount), 0) FROM (
+                SELECT amount FROM transactions WHERE type='Expense' AND date LIKE ?
+                UNION ALL
+                SELECT amount FROM credit_card_transactions WHERE txn_type='expense' AND date LIKE ?
+            )""",
+            (f"{today_str}%", f"{today_str}%")
         )
+        # Combined query for Yesterday
         res_yest = db.execute(
-            "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type='Expense' AND date LIKE ?",
-            (f"{yesterday_str}%",)
+            """SELECT COALESCE(SUM(amount), 0) FROM (
+                SELECT amount FROM transactions WHERE type='Expense' AND date LIKE ?
+                UNION ALL
+                SELECT amount FROM credit_card_transactions WHERE txn_type='expense' AND date LIKE ?
+            )""",
+            (f"{yesterday_str}%", f"{yesterday_str}%")
         )
         today = float(res_today.rows[0][0]) if res_today and res_today.rows else 0.0
         yesterday = float(res_yest.rows[0][0]) if res_yest and res_yest.rows else 0.0
@@ -99,7 +130,11 @@ class FinanceService:
                 SELECT SUBSTR(date, 1, 7) as Month,
                        SUM(CASE WHEN type='Income' THEN amount ELSE 0 END) as Income,
                        SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END) as Expense
-                FROM transactions
+                FROM (
+                    SELECT date, amount, type FROM transactions
+                    UNION ALL
+                    SELECT date, amount, 'Expense' as type FROM credit_card_transactions WHERE txn_type='expense'
+                )
                 WHERE date >= ? AND date < ?
                 GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC
             """
@@ -109,7 +144,11 @@ class FinanceService:
                 SELECT SUBSTR(date, 1, 7) as Month,
                        SUM(CASE WHEN type='Income' THEN amount ELSE 0 END) as Income,
                        SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END) as Expense
-                FROM transactions
+                FROM (
+                    SELECT date, amount, type FROM transactions
+                    UNION ALL
+                    SELECT date, amount, 'Expense' as type FROM credit_card_transactions WHERE txn_type='expense'
+                )
                 WHERE 1=1
             """
             params = []
@@ -133,8 +172,12 @@ class FinanceService:
             start_date, end_date = FinanceService.get_fiscal_period(year, month, int(fiscal_start_day))
             query = """
                 SELECT SUBSTR(date, 1, 7) as Month, SUM(amount) as Amount
-                FROM transactions
-                WHERE type='Expense' AND date >= ? AND date < ?
+                FROM (
+                    SELECT date, amount FROM transactions WHERE type='Expense'
+                    UNION ALL
+                    SELECT date, amount FROM credit_card_transactions WHERE txn_type='expense'
+                )
+                WHERE date >= ? AND date < ?
                 GROUP BY SUBSTR(date, 1, 7) ORDER BY Month DESC
                 LIMIT ?
             """
@@ -142,8 +185,12 @@ class FinanceService:
         else:
             query = """
                 SELECT SUBSTR(date, 1, 7) as Month, SUM(amount) as Amount
-                FROM transactions
-                WHERE type='Expense'
+                FROM (
+                    SELECT date, amount FROM transactions WHERE type='Expense'
+                    UNION ALL
+                    SELECT date, amount FROM credit_card_transactions WHERE txn_type='expense'
+                )
+                WHERE 1=1
             """
             params = []
             if year and year != "All" and month and month != "All":
@@ -167,28 +214,42 @@ class FinanceService:
         if fiscal_start_day is not None:
             start_date, end_date = FinanceService.get_fiscal_period(year, month, int(fiscal_start_day))
             query = """
-                SELECT COALESCE(c.name, 'Other') as Category, SUM(t.amount) as Amount
-                FROM transactions t
-                LEFT JOIN categories c ON t.category_id = c.id
-                WHERE t.type = 'Expense' AND t.date >= ? AND t.date < ?
-                GROUP BY c.name ORDER BY Amount DESC
+                SELECT Category, SUM(Amount) as Amount FROM (
+                    SELECT COALESCE(c.name, 'Other') as Category, t.amount as Amount, t.date
+                    FROM transactions t
+                    LEFT JOIN categories c ON t.category_id = c.id
+                    WHERE t.type = 'Expense'
+                    UNION ALL
+                    SELECT 'Credit Card' as Category, amount as Amount, date
+                    FROM credit_card_transactions
+                    WHERE txn_type = 'expense'
+                )
+                WHERE date >= ? AND date < ?
+                GROUP BY Category ORDER BY Amount DESC
             """
             res = db.execute(query, (start_date, end_date))
         else:
             query = """
-                SELECT COALESCE(c.name, 'Other') as Category, SUM(t.amount) as Amount
-                FROM transactions t
-                LEFT JOIN categories c ON t.category_id = c.id
-                WHERE t.type = 'Expense'
+                SELECT Category, SUM(Amount) as Amount FROM (
+                    SELECT COALESCE(c.name, 'Other') as Category, t.amount as Amount, t.date
+                    FROM transactions t
+                    LEFT JOIN categories c ON t.category_id = c.id
+                    WHERE t.type = 'Expense'
+                    UNION ALL
+                    SELECT 'Credit Card' as Category, amount as Amount, date
+                    FROM credit_card_transactions
+                    WHERE txn_type = 'expense'
+                )
+                WHERE 1=1
             """
             params = []
             if year and year != "All" and month and month != "All":
-                query += " AND t.date LIKE ?"
+                query += " AND date LIKE ?"
                 params.append(f"{year}-{month:02d}%")
             elif year and year != "All":
-                query += " AND t.date LIKE ?"
+                query += " AND date LIKE ?"
                 params.append(f"{year}%")
-            query += " GROUP BY c.name ORDER BY Amount DESC"
+            query += " GROUP BY Category ORDER BY Amount DESC"
             res = db.execute(query, tuple(params))
         if res and res.rows:
             return pd.DataFrame(res.rows, columns=["Category", "Amount"])
@@ -196,7 +257,14 @@ class FinanceService:
 
     @staticmethod
     def get_available_years():
-        res = db.execute("SELECT DISTINCT SUBSTR(date, 1, 4) as yr FROM transactions ORDER BY yr DESC")
+        query = """
+            SELECT DISTINCT SUBSTR(date, 1, 4) as yr FROM (
+                SELECT date FROM transactions
+                UNION ALL
+                SELECT date FROM credit_card_transactions
+            ) ORDER BY yr DESC
+        """
+        res = db.execute(query)
         if res and res.rows:
             return [int(r[0]) for r in res.rows if r[0]]
         return [datetime.now().year]
@@ -207,7 +275,11 @@ class FinanceService:
         if year and year != "All":
             query = """
                 SELECT DISTINCT SUBSTR(date, 1, 7) as ym
-                FROM transactions
+                FROM (
+                    SELECT date FROM transactions
+                    UNION ALL
+                    SELECT date FROM credit_card_transactions
+                )
                 WHERE SUBSTR(date, 1, 4) = ?
                 ORDER BY ym DESC
             """
@@ -215,7 +287,11 @@ class FinanceService:
         else:
             query = """
                 SELECT DISTINCT SUBSTR(date, 1, 7) as ym
-                FROM transactions
+                FROM (
+                    SELECT date FROM transactions
+                    UNION ALL
+                    SELECT date FROM credit_card_transactions
+                )
                 ORDER BY ym DESC
             """
             res = db.execute(query)
