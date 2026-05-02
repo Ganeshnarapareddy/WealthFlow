@@ -266,6 +266,21 @@ class CreditCardService:
         return pd.DataFrame(columns=["id", "Date", "Amount", "Status", "Paid Date"])
 
     @staticmethod
+    def get_upcoming_emi_payments(days_ahead=30):
+        """Get upcoming EMI payments across all cards."""
+        res = db.execute("""
+            SELECT p.id, e.description, p.amount, p.due_date, c.name as card_name
+            FROM credit_card_emi_payments p
+            JOIN credit_card_emis e ON p.emi_id = e.id
+            JOIN credit_cards c ON e.card_id = c.id
+            WHERE p.status = 'pending' AND p.due_date <= date('now', '+' || ? || ' days')
+            ORDER BY p.due_date ASC
+        """, (days_ahead,))
+        if res and res.rows:
+            return pd.DataFrame(res.rows, columns=["id", "Description", "Amount", "Due Date", "Card"])
+        return pd.DataFrame(columns=["id", "Description", "Amount", "Due Date", "Card"])
+
+    @staticmethod
     def delete_emi(emi_id):
         """Delete an EMI and its payments."""
         db.execute("DELETE FROM credit_card_emi_payments WHERE emi_id = ?", (emi_id,))

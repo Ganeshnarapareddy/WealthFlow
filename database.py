@@ -87,10 +87,12 @@ class TursoManager:
                 start_date TEXT, status TEXT DEFAULT 'active',
                 FOREIGN KEY (card_id) REFERENCES credit_cards(id))""",
             """CREATE TABLE IF NOT EXISTS credit_card_emi_payments (
-                id TEXT PRIMARY KEY, emi_id TEXT, due_date TEXT,
                 amount REAL, status TEXT DEFAULT 'pending',
                 paid_date TEXT,
-                FOREIGN KEY (emi_id) REFERENCES credit_card_emis(id))"""
+                FOREIGN KEY (emi_id) REFERENCES credit_card_emis(id))""",
+            """CREATE TABLE IF NOT EXISTS actioned_alerts (
+                id TEXT PRIMARY KEY, alert_id TEXT,
+                month_year TEXT, actioned_at TEXT)"""
         ]
         
         for q in ddl:

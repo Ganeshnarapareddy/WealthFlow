@@ -372,48 +372,84 @@ if page == "Dashboard":
     # Smart Alerts Section
     st.markdown("### 🔔 Smart Alerts")
 
-    # Subscription renewals
-    alerts = RecurringService.get_upcoming_renewals(30)
-    if alerts:
-        for alert in alerts[:5]:
-            days = alert['days_left']
-            amt_fmt = fmt(alert['amount'])
-            if days <= 0:
-                st.warning(f"🔴 **{alert['name']}** renews **today**! ({amt_fmt})")
-            elif days == 1:
-                st.warning(f"🟡 **{alert['name']}** renews **tomorrow**! ({days} day left - {amt_fmt})")
-            elif days <= 7:
-                st.info(f"🟢 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
-            else:
-                st.write(f"📅 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
+    with st.container(height=350):
+        # 1. Subscription renewals
+        alerts = RecurringService.get_upcoming_renewals(30)
+        if alerts:
+            st.markdown("#### 💳 Subscriptions")
+            for alert in alerts:
+                days = alert['days_left']
+                amt_fmt = fmt(alert['amount'])
+                alert_id = f"sub_{alert['id']}_{datetime.now().strftime('%m%Y')}"
+                is_done = FinanceService.is_alert_actioned(alert_id)
+                
+                c1, c2 = st.columns([0.85, 0.15])
+                with c1:
+                    if days <= 0: st.warning(f"🔴 **{alert['name']}** renews **today**! ({amt_fmt})")
+                    elif days == 1: st.warning(f"🟡 **{alert['name']}** renews **tomorrow**! ({amt_fmt})")
+                    elif days <= 7: st.info(f"🟢 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
+                    else: st.write(f"📅 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
+                with c2:
+                    if st.checkbox("Done", value=is_done, key=f"chk_{alert_id}"):
+                        if not is_done:
+                            FinanceService.mark_alert_actioned(alert_id)
+                            st.rerun()
+            st.divider()
 
-    # Loan due date alerts
-    loan_alerts = LoanService.get_upcoming_dues(30)
-    for alert in loan_alerts:
-        days = alert['days_left']
-        amt_fmt = fmt(alert['remaining'])
-        label = "Loan Given" if alert['loan_type'] == 'given' else "Loan Taken"
-        if days <= 0:
-            st.error(f"🔴 **{alert['person_name']}** ({label}) — **OVERDUE**! Outstanding: {amt_fmt}")
-        elif days <= 3:
-            st.warning(f"🔴 **{alert['person_name']}** ({label}) due in **{days} days**! Outstanding: {amt_fmt}")
-        elif days <= 7:
-            st.info(f"🟢 **{alert['person_name']}** ({label}) due in **{days} days**")
-        else:
-            st.write(f"📅 **{alert['person_name']}** ({label}) due in **{days} days**")
+        # 2. Loan due date alerts
+        loan_alerts = LoanService.get_upcoming_dues(30)
+        if loan_alerts:
+            st.markdown("#### 💰 Loans")
+            for alert in loan_alerts:
+                days = alert['days_left']
+                amt_fmt = fmt(alert['remaining'])
+                label = "Loan Given" if alert['loan_type'] == 'given' else "Loan Taken"
+                
+                c1, c2 = st.columns([0.85, 0.15])
+                with c1:
+                    if days <= 0: st.error(f"🔴 **{alert['person_name']}** ({label}) — **OVERDUE**! {amt_fmt}")
+                    elif days <= 3: st.warning(f"🔴 **{alert['person_name']}** ({label}) due in **{days} days**! {amt_fmt}")
+                    elif days <= 7: st.info(f"🟢 **{alert['person_name']}** ({label}) due in **{days} days**")
+                    else: st.write(f"📅 **{alert['person_name']}** ({label}) due in **{days} days**")
+                with c2:
+                    pass
+            st.divider()
 
-    # Credit card bill alerts
-    card_alerts = CreditCardService.get_upcoming_bills(15)
-    for bill in card_alerts:
-        days = bill['days_left']
-        if days <= 0:
-            st.error(f"🔴 **{bill['name']}** ({bill['bank']}) bill **due today**! Outstanding: {fmt(bill['balance'])}")
-        elif days <= 3:
-            st.warning(f"🔴 **{bill['name']}** ({bill['bank']}) bill due in **{days} days**! Outstanding: {fmt(bill['balance'])}")
-        elif days <= 7:
-            st.info(f"🟢 **{bill['name']}** ({bill['bank']}) bill due in **{days} days**")
-        else:
-            st.write(f"📅 **{bill['name']}** ({bill['bank']}) bill in **{days} days**")
+        # 3. Credit card EMI alerts
+        emi_alerts = CreditCardService.get_upcoming_emi_payments(30)
+        if not emi_alerts.empty:
+            st.markdown("#### 🗓️ Credit Card EMIs")
+            for _, emi in emi_alerts.iterrows():
+                due_dt = datetime.strptime(emi['Due Date'], "%Y-%m-%d").date()
+                days = (due_dt - datetime.now().date()).days
+                amt_fmt = fmt(emi['Amount'])
+                
+                c1, c2 = st.columns([0.85, 0.15])
+                with c1:
+                    if days <= 0: st.error(f"🔴 **{emi['Description']}** ({emi['Card']}) — **DUE TODAY**! {amt_fmt}")
+                    elif days <= 3: st.warning(f"🔴 **{emi['Description']}** ({emi['Card']}) due in **{days} days**! {amt_fmt}")
+                    elif days <= 7: st.info(f"🟢 **{emi['Description']}** ({emi['Card']}) due in **{days} days**")
+                    else: st.write(f"📅 **{emi['Description']}** ({emi['Card']}) due in **{days} days**")
+                with c2:
+                    if st.checkbox("Paid", key=f"emi_chk_{emi['id']}"):
+                        CreditCardService.mark_emi_paid(emi['id'])
+                        st.rerun()
+            st.divider()
+
+        # 4. Credit card bill alerts
+        card_alerts = CreditCardService.get_upcoming_bills(15)
+        if card_alerts:
+            st.markdown("#### 💳 Card Bills")
+            for bill in card_alerts:
+                days = bill['days_left']
+                c1, c2 = st.columns([0.85, 0.15])
+                with c1:
+                    if days <= 0: st.error(f"🔴 **{bill['name']}** bill **due today**! {fmt(bill['balance'])}")
+                    elif days <= 3: st.warning(f"🔴 **{bill['name']}** bill due in **{days} days**! {fmt(bill['balance'])}")
+                    elif days <= 7: st.info(f"🟢 **{bill['name']}** bill due in **{days} days**")
+                    else: st.write(f"📅 **{bill['name']}** bill in **{days} days**")
+                with c2:
+                    pass
 
     st.markdown("<br>", unsafe_allow_html=True)
 

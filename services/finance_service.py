@@ -16,6 +16,22 @@ class FinanceService:
         return pd.DataFrame(columns=["id", "name", "type", "icon"])
 
     @staticmethod
+    def is_alert_actioned(alert_id):
+        """Check if an alert is actioned for the current month."""
+        month_year = datetime.now().strftime("%m-%Y")
+        res = db.execute("SELECT id FROM actioned_alerts WHERE alert_id = ? AND month_year = ?", (alert_id, month_year))
+        return True if res and res.rows else False
+
+    @staticmethod
+    def mark_alert_actioned(alert_id):
+        """Mark an alert as actioned for the current month."""
+        aid = str(uuid.uuid4())
+        month_year = datetime.now().strftime("%m-%Y")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        db.execute("INSERT INTO actioned_alerts (id, alert_id, month_year, actioned_at) VALUES (?, ?, ?, ?)",
+                   (aid, alert_id, month_year, now))
+
+    @staticmethod
     def add_transaction(amount, category_id, description, date_obj, txn_type):
         """
         Insert a transaction. `txn_type` is 'Income' or 'Expense'.

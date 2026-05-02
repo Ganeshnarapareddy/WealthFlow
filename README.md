@@ -6,11 +6,19 @@ WealthFlow Pro is a state-of-the-art personal finance management system designed
 ## 🚀 Features
 
 - **Command Center**: Real-time dashboard with Net Worth tracking, Monthly Burn metrics, and Cash Flow pulse.
+- **EMI & Loan Tracker**: Comprehensive loan management for both loans given and taken. Track remaining installments (e.g., `3/24 Remaining`) and view upcoming due dates.
+- **Credit Card Suite**: Advanced card management including:
+    - **Utilization Tracking**: Visual gauges for card limits and outstanding balances.
+    - **EMI Focus Mode**: Option to unlink standard transactions for a specialized EMI-only view.
+    - **Balance Sync**: One-click synchronization to ensure your outstanding amount matches your transaction history.
+- **Smart Alerts**: An actionable notification system for:
+    - **Subscription Renewals**: Track upcoming renewals with a monthly "Done" acknowledgment system.
+    - **Credit Card Bills & EMIs**: Direct payment tracking from the dashboard.
+    - **Loan Dues**: Alerts for overdue or upcoming payments.
 - **Wealth Portfolio**: Track your assets (Stocks, Crypto, Gold, Mutual Funds, etc.) with a dedicated editing suite.
 - **Piggy Bank**: Goal-based savings tracker with custom emoji icons and progress bars.
-- **Recurring Bills**: Advanced subscription management with support for Monthly, Quarterly, and 6-Month cycles.
+- **Recurring Bills**: Advanced subscription management with support for Monthly, Quarterly, and Yearly cycles.
 - **Smart Budgets**: Category-based spending guardrails with visual alerts and burn-rate gauges.
-- **Ledger**: Detailed transaction history with automatic date/time stamps and category icons.
 - **Multi-Currency Support**: Switch between INR, USD, EUR, and GBP instantly across the entire app.
 
 ## 🛠️ Tech Stack
