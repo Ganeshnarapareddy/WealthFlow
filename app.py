@@ -376,84 +376,101 @@ if page == "Dashboard":
     # Smart Alerts Section
     st.markdown("### 🔔 Smart Alerts")
 
-    with st.container(height=350):
-        # 1. Subscription renewals
-        alerts = RecurringService.get_upcoming_renewals(30)
-        if alerts:
-            st.markdown("#### 💳 Subscriptions")
-            for alert in alerts:
-                days = alert['days_left']
-                amt_fmt = fmt(alert['amount'])
-                alert_id = f"sub_{alert['id']}_{datetime.now().strftime('%m%Y')}"
-                is_done = FinanceService.is_alert_actioned(alert_id)
+    # Consolidate all alerts
+    all_alerts = []
+    
+    # 1. Subscriptions
+    subs = RecurringService.get_upcoming_renewals(30)
+    for s in subs:
+        all_alerts.append({
+            'category': 'Subscription',
+            'days': s['days_left'],
+            'date': s['next_date'].strftime("%d %b"),
+            'name': s['name'],
+            'amount': s['amount'],
+            'id': f"sub_{s['id']}_{datetime.now().strftime('%m%Y')}",
+            'icon': "💳"
+        })
+        
+    # 2. Loans
+    loan_alerts = LoanService.get_upcoming_dues(30)
+    for l in loan_alerts:
+        all_alerts.append({
+            'category': 'Loan',
+            'days': l['days_left'],
+            'date': datetime.strptime(l['due_date'], "%Y-%m-%d").strftime("%d %b"),
+            'name': f"{l['person_name']} ({'Given' if l['loan_type'] == 'given' else 'Taken'})",
+            'amount': l['remaining'],
+            'id': l['id'],
+            'icon': "💰"
+        })
+        
+    # 3. CC EMIs
+    emi_alerts = CreditCardService.get_upcoming_emi_payments(30)
+    for _, e in emi_alerts.iterrows():
+        due_dt = datetime.strptime(e['Due Date'], "%Y-%m-%d").date()
+        days = (due_dt - datetime.now().date()).days
+        all_alerts.append({
+            'category': 'EMI',
+            'days': days,
+            'date': due_dt.strftime("%d %b"),
+            'name': f"{e['Description']} ({e['Card']})",
+            'amount': e['Amount'],
+            'id': e['id'],
+            'icon': "🗓️"
+        })
+        
+    # 4. CC Bills
+    card_alerts = CreditCardService.get_upcoming_bills(15)
+    for b in card_alerts:
+        all_alerts.append({
+            'category': 'Bill',
+            'days': b['days_left'],
+            'date': datetime.strptime(b['due_date'], "%Y-%m-%d").strftime("%d %b"),
+            'name': f"{b['name']} Bill",
+            'amount': b['balance'],
+            'id': b['id'],
+            'icon': "💳"
+        })
+
+    # Sort by urgency
+    all_alerts.sort(key=lambda x: x['days'])
+
+    with st.container(height=400):
+        if not all_alerts:
+            st.success("All clear! No alerts for the next 30 days.")
+        else:
+            for a in all_alerts:
+                days = a['days']
+                amt_fmt = fmt(a['amount'])
+                cat = a['category']
                 
                 c1, c2 = st.columns([0.85, 0.15])
                 with c1:
-                    if days <= 0: st.warning(f"🔴 **{alert['name']}** renews **today**! ({amt_fmt})")
-                    elif days == 1: st.warning(f"🟡 **{alert['name']}** renews **tomorrow**! ({amt_fmt})")
-                    elif days <= 7: st.info(f"🟢 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
-                    else: st.write(f"📅 **{alert['name']}** renews in **{days} days** ({amt_fmt})")
+                    msg = f"{a['icon']} **{a['name']}** "
+                    dt = f"`{a['date']}`"
+                    if days <= 0:
+                        st.error(f"🔴 {msg} — **DUE NOW** {dt}! ({amt_fmt})")
+                    elif days == 1:
+                        st.warning(f"🟡 {msg} — **DUE TOMORROW** {dt}! ({amt_fmt})")
+                    elif days <= 7:
+                        st.info(f"🟢 {msg} — in **{days} days** {dt} ({amt_fmt})")
+                    else:
+                        st.write(f"📅 {msg} — in **{days} days** {dt} ({amt_fmt})")
+                
                 with c2:
-                    if st.checkbox("Done", value=is_done, key=f"chk_{alert_id}"):
-                        if not is_done:
-                            FinanceService.mark_alert_actioned(alert_id)
+                    if cat == 'Subscription':
+                        is_done = FinanceService.is_alert_actioned(a['id'])
+                        if st.checkbox("Done", value=is_done, key=f"chk_{a['id']}"):
+                            if not is_done:
+                                FinanceService.mark_alert_actioned(a['id'])
+                                st.rerun()
+                    elif cat == 'EMI':
+                        if st.checkbox("Paid", key=f"emi_chk_{a['id']}"):
+                            CreditCardService.mark_emi_paid(a['id'])
                             st.rerun()
+                    # For Loans and Bills, add action logic if needed in future
             st.divider()
-
-        # 2. Loan due date alerts
-        loan_alerts = LoanService.get_upcoming_dues(30)
-        if loan_alerts:
-            st.markdown("#### 💰 Loans")
-            for alert in loan_alerts:
-                days = alert['days_left']
-                amt_fmt = fmt(alert['remaining'])
-                label = "Loan Given" if alert['loan_type'] == 'given' else "Loan Taken"
-                
-                c1, c2 = st.columns([0.85, 0.15])
-                with c1:
-                    if days <= 0: st.error(f"🔴 **{alert['person_name']}** ({label}) — **OVERDUE**! {amt_fmt}")
-                    elif days <= 3: st.warning(f"🔴 **{alert['person_name']}** ({label}) due in **{days} days**! {amt_fmt}")
-                    elif days <= 7: st.info(f"🟢 **{alert['person_name']}** ({label}) due in **{days} days**")
-                    else: st.write(f"📅 **{alert['person_name']}** ({label}) due in **{days} days**")
-                with c2:
-                    pass
-            st.divider()
-
-        # 3. Credit card EMI alerts
-        emi_alerts = CreditCardService.get_upcoming_emi_payments(30)
-        if not emi_alerts.empty:
-            st.markdown("#### 🗓️ Credit Card EMIs")
-            for _, emi in emi_alerts.iterrows():
-                due_dt = datetime.strptime(emi['Due Date'], "%Y-%m-%d").date()
-                days = (due_dt - datetime.now().date()).days
-                amt_fmt = fmt(emi['Amount'])
-                
-                c1, c2 = st.columns([0.85, 0.15])
-                with c1:
-                    if days <= 0: st.error(f"🔴 **{emi['Description']}** ({emi['Card']}) — **DUE TODAY**! {amt_fmt}")
-                    elif days <= 3: st.warning(f"🔴 **{emi['Description']}** ({emi['Card']}) due in **{days} days**! {amt_fmt}")
-                    elif days <= 7: st.info(f"🟢 **{emi['Description']}** ({emi['Card']}) due in **{days} days**")
-                    else: st.write(f"📅 **{emi['Description']}** ({emi['Card']}) due in **{days} days**")
-                with c2:
-                    if st.checkbox("Paid", key=f"emi_chk_{emi['id']}"):
-                        CreditCardService.mark_emi_paid(emi['id'])
-                        st.rerun()
-            st.divider()
-
-        # 4. Credit card bill alerts
-        card_alerts = CreditCardService.get_upcoming_bills(15)
-        if card_alerts:
-            st.markdown("#### 💳 Card Bills")
-            for bill in card_alerts:
-                days = bill['days_left']
-                c1, c2 = st.columns([0.85, 0.15])
-                with c1:
-                    if days <= 0: st.error(f"🔴 **{bill['name']}** bill **due today**! {fmt(bill['balance'])}")
-                    elif days <= 3: st.warning(f"🔴 **{bill['name']}** bill due in **{days} days**! {fmt(bill['balance'])}")
-                    elif days <= 7: st.info(f"🟢 **{bill['name']}** bill due in **{days} days**")
-                    else: st.write(f"📅 **{bill['name']}** bill in **{days} days**")
-                with c2:
-                    pass
 
     st.markdown("<br>", unsafe_allow_html=True)
 
