@@ -70,8 +70,30 @@ class FinanceService:
             db.execute("DELETE FROM transactions WHERE id = ?", (tid,))
 
     @staticmethod
-    def get_recent_transactions(limit=50):
-        query = """
+    def get_filtered_transactions(year=None, month=None, day=None, txn_type=None, limit=100):
+        """Retrieve transactions with filters for year, month, day, and type."""
+        conditions = []
+        params = []
+        
+        if txn_type and txn_type != "All":
+            conditions.append("type = ?")
+            params.append(txn_type)
+        
+        if year and year != "All":
+            conditions.append("strftime('%Y', date) = ?")
+            params.append(str(year))
+            
+        if month and month != "All":
+            conditions.append("strftime('%m', date) = ?")
+            params.append(f"{int(month):02d}")
+            
+        if day and day != "All":
+            conditions.append("strftime('%d', date) = ?")
+            params.append(f"{int(day):02d}")
+            
+        where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+        
+        query = f"""
             SELECT id, date, description, amount, category, icon, type, source FROM (
                 SELECT t.id, t.date, t.description, t.amount,
                        COALESCE(c.name, 'Other') AS category,
@@ -86,11 +108,12 @@ class FinanceService:
                        'credit_card' as source
                 FROM credit_card_transactions ct
                 WHERE ct.txn_type = 'expense'
-            )
+            ) {where_clause}
             ORDER BY date DESC
             LIMIT ?
         """
-        res = db.execute(query, (limit,))
+        params.append(limit)
+        res = db.execute(query, tuple(params))
         if res and res.rows:
             return pd.DataFrame(
                 res.rows,
@@ -99,6 +122,10 @@ class FinanceService:
         return pd.DataFrame(
             columns=["ID", "Date", "Description", "Amount", "Category", "Icon", "Type", "Source"]
         )
+
+    @staticmethod
+    def get_recent_transactions(limit=50):
+        return FinanceService.get_filtered_transactions(limit=limit)
 
     @staticmethod
     def get_net_worth():

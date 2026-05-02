@@ -83,6 +83,10 @@ st.markdown("""
 def nav_to(p):
     st.session_state['page'] = p
     st.session_state['show_menu'] = False
+    # Reset transaction filters when moving between pages
+    for k in ["hist_year", "hist_month", "hist_day", "hist_type"]:
+        if k in st.session_state:
+            del st.session_state[k]
     st.rerun()
 
 # Delete confirmation helper
@@ -561,7 +565,27 @@ elif page == "Transactions":
                     st.success("Transaction Logged!")
 
     with t2:
-        df_hist = FinanceService.get_recent_transactions(100)
+        # Transaction Filters
+        st.markdown("#### 🔍 Filter History")
+        f1, f2, f3, f4 = st.columns(4)
+        with f1:
+            y_opts = ["All"] + [str(y) for y in FinanceService.get_available_years()]
+            sel_y = st.selectbox("Year", y_opts, key="hist_year")
+        with f2:
+            m_opts = ["All"] + [str(i) for i in range(1, 13)]
+            sel_m = st.selectbox("Month", m_opts, key="hist_month")
+        with f3:
+            d_opts = ["All"] + [str(i) for i in range(1, 32)]
+            sel_d = st.selectbox("Day", d_opts, key="hist_day")
+        with f4:
+            t_opts = ["All", "Expense", "Income"]
+            sel_t = st.selectbox("Type", t_opts, key="hist_type")
+            
+        st.divider()
+        
+        df_hist = FinanceService.get_filtered_transactions(
+            year=sel_y, month=sel_m, day=sel_d, txn_type=sel_t, limit=100
+        )
         if not df_hist.empty:
             for _, row in df_hist.iterrows():
                 c1, c2, c3 = st.columns([1, 4, 1])
