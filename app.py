@@ -462,12 +462,22 @@ if page == "Dashboard":
             fiscal_start_day
         )
         if not df_sp.empty:
-            fig = px.bar(df_sp, x='Category', y='Amount', color='Amount',
-                         color_continuous_scale='blues', text_auto='.2f')
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0",
-                              margin=dict(t=0,b=0,l=0,r=0), plot_bgcolor='rgba(0,0,0,0)')
-            fig.update_traces(textfont_color='white')
-            st.plotly_chart(fig, use_container_width=True)
+            fig = px.bar(df_sp, x='Category', y='Amount', color='Category', text_auto='.2f')
+            # Dynamic width to ensure readability with many categories
+            chart_width = max(len(df_sp) * 100, 700) 
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font_color="#e2e8f0", showlegend=False,
+                margin=dict(t=30,b=20,l=0,r=0),
+                width=chart_width,
+                xaxis=dict(fixedrange=True), yaxis=dict(fixedrange=True)
+            )
+            fig.update_traces(textfont_color='white', textposition='outside')
+            
+            # Use custom HTML for horizontal scrolling
+            st.markdown('<div style="overflow-x: auto; width: 100%; border-radius: 12px;">', unsafe_allow_html=True)
+            st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': False})
+            st.markdown('</div>', unsafe_allow_html=True)
         else: empty_state("No Data", "No spending data available.")
 
     with t_ie:
@@ -478,13 +488,17 @@ if page == "Dashboard":
         )
         if not df_ie.empty:
             fig_ie = go.Figure(data=[
-                go.Bar(name='Income', x=df_ie['Month'], y=df_ie['Income'], marker_color='#4ade80'),
-                go.Bar(name='Expense', x=df_ie['Month'], y=df_ie['Expense'], marker_color='#f87171')
+                go.Bar(name='Income', x=df_ie['Month'], y=df_ie['Income'], marker_color='#4ade80', text=df_ie['Income'], texttemplate='%{text:.2s}', textposition='outside'),
+                go.Bar(name='Expense', x=df_ie['Month'], y=df_ie['Expense'], marker_color='#f87171', text=df_ie['Expense'], texttemplate='%{text:.2s}', textposition='outside')
             ])
-            fig_ie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                                 font_color="#e2e8f0", barmode='group',
-                                 yaxis=dict(gridcolor='rgba(255,255,255,0.1)'))
-            st.plotly_chart(fig_ie, use_container_width=True)
+            fig_ie.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font_color="#e2e8f0", barmode='group',
+                margin=dict(t=30,b=20,l=0,r=0),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
+                xaxis=dict(fixedrange=True)
+            )
+            st.plotly_chart(fig_ie, use_container_width=True, config={'displayModeBar': False})
         else: empty_state("No Data", "Income/expense data will appear here.")
 
     with t_tr:
@@ -494,19 +508,26 @@ if page == "Dashboard":
             fiscal_start_day=fiscal_start_day
         )
         if not df_tr.empty:
-            fig_tr = px.line(df_tr, x='Month', y='Amount', markers=True)
-            fig_tr.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0",
-                                plot_bgcolor='rgba(255,255,255,0.05)',
-                                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'))
-            fig_tr.update_traces(line_color='#3b82f6')
-            st.plotly_chart(fig_tr, use_container_width=True)
+            fig_tr = px.line(df_tr, x='Month', y='Amount', markers=True, text='Amount')
+            fig_tr.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0",
+                plot_bgcolor='rgba(255,255,255,0.05)',
+                margin=dict(t=30,b=20,l=0,r=0),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
+                xaxis=dict(fixedrange=True)
+            )
+            fig_tr.update_traces(line_color='#3b82f6', textposition='top center', texttemplate='%{text:.2s}')
+            st.plotly_chart(fig_tr, use_container_width=True, config={'displayModeBar': False})
         else: empty_state("No Data", "Spend trend will appear here.")
         
     with t_we:
         ast_val = AssetService.get_total_assets_value()
         fig3 = px.pie(values=[net-ast_val, ast_val], names=['Cash', 'Invested'], hole=0.6)
-        fig3.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0")
-        st.plotly_chart(fig3, use_container_width=True)
+        fig3.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0",
+            margin=dict(t=0,b=0,l=0,r=0), showlegend=True
+        )
+        st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
 
     with t_bu:
         budget_month = sel_month if sel_month != "All" else None
