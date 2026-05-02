@@ -1481,19 +1481,21 @@ elif page == "Settings":
     # List Existing Categories
     df_cats = FinanceService.get_categories(uid)
     if not df_cats.empty:
-        for _, row in df_cats.iterrows():
-            c1, c2 = st.columns([4, 1])
-            with c1:
-                st.markdown(f"{row['icon']} **{row['name']}** ({row['type']})")
-            with c2:
-                if st.button("🗑️", key=f"del_cat_{row['id']}"):
-                    # Verify ownership
-                    res = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
-                    if res and res.rows:
-                        db.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
-                        st.rerun()
-                    else:
-                        st.error("Cannot delete system categories.")
+        with st.expander("📋 View & Manage Existing Categories", expanded=False):
+            for _, row in df_cats.iterrows():
+                c1, c2, c3 = st.columns([3, 1, 5])
+                with c1:
+                    st.markdown(f"{row['icon']} **{row['name']}** ({row['type']})")
+                with c2:
+                    if st.button("🗑️", key=f"del_cat_{row['id']}"):
+                        # Verify ownership
+                        res = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
+                        if res and res.rows:
+                            db.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
+                            st.rerun()
+                        else:
+                            st.error("Cannot delete system categories.")
+                st.divider()
 
 elif page == "Admin" and st.session_state.user['role'] == 'admin':
     st.markdown('<h1 class="main-header">User Management</h1>', unsafe_allow_html=True)
