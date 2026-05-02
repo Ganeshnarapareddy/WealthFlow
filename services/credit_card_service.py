@@ -161,14 +161,21 @@ class CreditCardService:
     def get_card_balance(card_id):
         """Calculate current balance: sum(expenses) - sum(payments)."""
         res = db.execute(
-            "SELECT COALESCE(SUM(CASE WHEN txn_type='expense' THEN amount ELSE 0 END), 0) - "
-            "COALESCE(SUM(CASE WHEN txn_type='payment' THEN amount ELSE 0 END), 0) "
+            "SELECT COALESCE(SUM(CASE WHEN txn_type='payment' THEN amount ELSE 0 END), 0) - "
+            "COALESCE(SUM(CASE WHEN txn_type='expense' THEN amount ELSE 0 END), 0) "
             "FROM credit_card_transactions WHERE card_id = ?",
             (card_id,)
         )
         if res and res.rows:
             return float(res.rows[0][0] or 0)
         return 0.0
+
+    @staticmethod
+    def sync_card_balance(card_id):
+        """Recalculate and update the stored balance from transactions."""
+        balance = CreditCardService.get_card_balance(card_id)
+        db.execute("UPDATE credit_cards SET current_balance = ? WHERE id = ?", (balance, card_id))
+        return balance
 
     @staticmethod
     def get_total_outstanding():
@@ -232,10 +239,23 @@ class CreditCardService:
     @staticmethod
     def get_card_emis(card_id):
         """Get active EMIs for a card."""
-        res = db.execute("SELECT id, description, total_amount, monthly_amount, tenure, start_date FROM credit_card_emis WHERE card_id = ? AND status = 'active'", (card_id,))
+        res = db.execute("""
+            SELECT e.id, e.description, e.total_amount, e.monthly_amount, e.tenure, e.start_date,
+                   (SELECT COUNT(*) FROM credit_card_emi_payments WHERE emi_id = e.id AND status = 'pending') as remaining_tenure
+            FROM credit_card_emis e 
+            WHERE e.card_id = ? AND e.status = 'active'
+        """, (card_id,))
         if res and res.rows:
-            return pd.DataFrame(res.rows, columns=["id", "Description", "Total", "Monthly", "Tenure", "Start"])
-        return pd.DataFrame(columns=["id", "Description", "Total", "Monthly", "Tenure", "Start"])
+            return pd.DataFrame(res.rows, columns=["id", "Description", "Total", "Monthly", "Tenure", "Start", "Remaining"])
+        return pd.DataFrame(columns=["id", "Description", "Total", "Monthly", "Tenure", "Start", "Remaining"])
+
+    @staticmethod
+    def get_all_active_emis():
+        """Get all active EMIs across all cards."""
+        res = db.execute("SELECT id, monthly_amount FROM credit_card_emis WHERE status = 'active'")
+        if res and res.rows:
+            return pd.DataFrame(res.rows, columns=["id", "Monthly"])
+        return pd.DataFrame(columns=["id", "Monthly"])
 
     @staticmethod
     def get_emi_payments(emi_id):

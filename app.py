@@ -292,10 +292,11 @@ if page == "Dashboard":
     prev_savings_rate = ((prev_inc - prev_exp) / prev_inc * 100) if prev_inc > 0 else 0.0
     sr_delta_str, sr_increased = FinanceService.get_comparison_delta(savings_rate, prev_savings_rate)
 
-    # Top category and comparison
-    top_cat, top_amt, prev_top_amt, top_delta_str, top_increased = FinanceService.get_top_category_comparison(
-        sel_year, sel_month, fiscal_start_day
-    )
+    # EMI stats
+    df_cc_emis = CreditCardService.get_all_active_emis()
+    df_loan_emis = LoanService.get_active_emi_stats()
+    total_emi_amt = df_cc_emis['Monthly'].sum() + df_loan_emis['Monthly'].sum()
+    active_emi_count = len(df_cc_emis) + len(df_loan_emis)
 
     # Subscription comparison
     prev_burn = 0.0
@@ -327,9 +328,9 @@ if page == "Dashboard":
     with a1: card_metric("Savings Rate", f"{savings_rate:.1f}%",
                          delta=sr_delta_str,
                          delta_color="normal")
-    with a2: card_metric("Top Category", top_cat if top_cat else "N/A",
-                         delta=top_delta_str)
-    with a3: card_metric("Subscriptions", fmt(burn) if burn > 0 else "N/A",
+    with a2: card_metric("No of EMIs per month", fmt(total_emi_amt),
+                         delta=f"{active_emi_count} Active")
+    with a3: card_metric("No of Subscriptions per month", fmt(burn) if burn > 0 else "N/A",
                          delta=burn_delta_str,
                          delta_color="inverse")
 
@@ -683,7 +684,8 @@ elif page == "Loans":
         if not loans.empty:
             for _, row in loans.iterrows():
                 st.markdown(f"**{row['person_name']}** — {fmt(row['amount'])}")
-                st.caption(f"Due: {row['due_date']} | Status: {row['status']} | Remaining: {fmt(row['remaining_amount'])}")
+                remaining_txt = f" | {row['remaining_tenure']}/{row['tenure']} Remaining" if row['emi_active'] else ""
+                st.caption(f"Due: {row['due_date']} | Status: {row['status']} | Remaining: {fmt(row['remaining_amount'])}{remaining_txt}")
                 if row['emi_active']:
                     st.caption(f"EMI: {fmt(row['emi_amount'])}/month | Tenure: {row['tenure']} months")
                 
@@ -762,7 +764,8 @@ elif page == "Loans":
         if not loans.empty:
             for _, row in loans.iterrows():
                 st.markdown(f"**{row['person_name']}** — {fmt(row['amount'])}")
-                st.caption(f"Due: {row['due_date']} | Status: {row['status']} | Remaining: {fmt(row['remaining_amount'])}")
+                remaining_txt = f" | {row['remaining_tenure']}/{row['tenure']} Remaining" if row['emi_active'] else ""
+                st.caption(f"Due: {row['due_date']} | Status: {row['status']} | Remaining: {fmt(row['remaining_amount'])}{remaining_txt}")
                 if row['emi_active']:
                     st.caption(f"EMI: {fmt(row['emi_amount'])}/month | Tenure: {row['tenure']} months")
 
@@ -874,7 +877,7 @@ elif page == "Credit Cards":
     if not df_cards.empty:
         for _, card in df_cards.iterrows():
             with st.expander(f"{card['name']} — {card['bank']}"):
-                c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+                c1, c2, c3, c4, c5 = st.columns([2, 1, 0.5, 0.5, 0.5])
                 with c1:
                     limit_val = card['card_limit'] if card['card_limit'] is not None else 0.0
                     total_out = CreditCardService.get_card_total_outstanding(card['id'])
@@ -892,34 +895,44 @@ elif page == "Credit Cards":
                         st.session_state['edit_card_id'] = card['id']
                         st.rerun()
                 with c4:
+                    if st.button("🔄", key=f"sync_card_{card['id']}", help="Sync Balance"):
+                        CreditCardService.sync_card_balance(card['id'])
+                        st.rerun()
+                with c5:
                     render_delete_button(card['id'], f"cdel_{card['id']}", CreditCardService.delete_card, card['name'])
 
                 # Add transaction form
                 st.markdown("**Transactions & EMIs**")
-                txn_tab1, txn_tab2, txn_tab3 = st.tabs(["➕ Add Expense", "➕ Add Payment", "➕ Add EMI"])
-                with txn_tab1:
-                    with st.form(f"card_exp_{card['id']}", clear_on_submit=True):
-                        exp_desc = st.text_input("Description", key=f"exp_desc_{card['id']}")
-                        exp_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"exp_amt_{card['id']}")
-                        exp_date = st.date_input("Date", value=datetime.now().date(), key=f"exp_date_{card['id']}")
-                        if st.form_submit_button("Record Expense"):
-                            if exp_amt and exp_amt > 0:
-                                full_dt = datetime.combine(exp_date, datetime.now().time()).strftime("%Y-%m-%d %H:%M")
-                                CreditCardService.add_transaction(card['id'], exp_amt, exp_desc, 'expense', txn_date=full_dt)
-                                st.session_state['card_txn_added'] = True
-                                st.rerun()
-                with txn_tab2:
-                    with st.form(f"card_pay_{card['id']}", clear_on_submit=True):
-                        pay_desc = st.text_input("Description", key=f"pay_desc_{card['id']}")
-                        pay_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"pay_amt_{card['id']}")
-                        pay_date = st.date_input("Date", value=datetime.now().date(), key=f"pay_date_{card['id']}")
-                        sync_bank = st.checkbox("Deduct from Main Bank Account", value=True, key=f"sync_bank_{card['id']}")
-                        if st.form_submit_button("Record Payment"):
-                            if pay_amt and pay_amt > 0:
-                                full_dt = datetime.combine(pay_date, datetime.now().time()).strftime("%Y-%m-%d %H:%M")
-                                CreditCardService.add_transaction(card['id'], pay_amt, pay_desc, 'payment', txn_date=full_dt, sync_bank=sync_bank)
-                                st.session_state['card_txn_added'] = True
-                                st.rerun()
+                unlink_cc_val = FinanceService.get_setting('cc_unlink_transactions', 'False') == 'True'
+                
+                if unlink_cc_val:
+                    # Only show EMI tab
+                    txn_tab3 = st.tabs(["➕ Add EMI"])[0]
+                else:
+                    txn_tab1, txn_tab2, txn_tab3 = st.tabs(["➕ Add Expense", "➕ Add Payment", "➕ Add EMI"])
+                    with txn_tab1:
+                        with st.form(f"card_exp_{card['id']}", clear_on_submit=True):
+                            exp_desc = st.text_input("Description", key=f"exp_desc_{card['id']}")
+                            exp_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"exp_amt_{card['id']}")
+                            exp_date = st.date_input("Date", value=datetime.now().date(), key=f"exp_date_{card['id']}")
+                            if st.form_submit_button("Record Expense"):
+                                if exp_amt and exp_amt > 0:
+                                    full_dt = datetime.combine(exp_date, datetime.now().time()).strftime("%Y-%m-%d %H:%M")
+                                    CreditCardService.add_transaction(card['id'], exp_amt, exp_desc, 'expense', txn_date=full_dt)
+                                    st.session_state['card_txn_added'] = True
+                                    st.rerun()
+                    with txn_tab2:
+                        with st.form(f"card_pay_{card['id']}", clear_on_submit=True):
+                            pay_desc = st.text_input("Description", key=f"pay_desc_{card['id']}")
+                            pay_amt = st.number_input("Amount", min_value=0.01, value=None, key=f"pay_amt_{card['id']}")
+                            pay_date = st.date_input("Date", value=datetime.now().date(), key=f"pay_date_{card['id']}")
+                            sync_bank = st.checkbox("Deduct from Main Bank Account", value=True, key=f"sync_bank_{card['id']}")
+                            if st.form_submit_button("Record Payment"):
+                                if pay_amt and pay_amt > 0:
+                                    full_dt = datetime.combine(pay_date, datetime.now().time()).strftime("%Y-%m-%d %H:%M")
+                                    CreditCardService.add_transaction(card['id'], pay_amt, pay_desc, 'payment', txn_date=full_dt, sync_bank=sync_bank)
+                                    st.session_state['card_txn_added'] = True
+                                    st.rerun()
                 
                 with txn_tab3:
                     with st.form(f"card_emi_{card['id']}", clear_on_submit=True):
@@ -939,7 +952,7 @@ elif page == "Credit Cards":
                 if not df_emis.empty:
                     st.markdown("### 🗓️ Active EMIs")
                     for _, emi in df_emis.iterrows():
-                        with st.expander(f"📌 {emi['Description']} ({fmt(emi['Monthly'])}/mo)"):
+                        with st.expander(f"📌 {emi['Description']} ({fmt(emi['Monthly'])}/mo) — {emi['Remaining']}/{emi['Tenure']} Remaining"):
                             ec1, ec2 = st.columns([3, 1])
                             with ec1:
                                 st.write(f"Total: **{fmt(emi['Total'])}** | Tenure: **{emi['Tenure']} months**")
@@ -1129,6 +1142,18 @@ elif page == "Settings":
     if st.button("Save Fiscal Day"):
         FinanceService.set_setting('fiscal_month_start_day', str(new_day))
         st.success(f"Fiscal month start day set to {new_day}!")
+        st.rerun()
+
+    st.divider()
+
+    # Credit Card Settings
+    st.markdown("### 💳 Credit Card Settings")
+    st.caption("Enable this to focus only on EMIs for Credit Cards.")
+    unlink_cc = FinanceService.get_setting('cc_unlink_transactions', 'False') == 'True'
+    new_unlink = st.checkbox("Unlink Transactions from Credit Card", value=unlink_cc, 
+                            help="If enabled, you can only add EMIs to Credit Cards. Standard Expense/Payment tabs will be hidden.")
+    if new_unlink != unlink_cc:
+        FinanceService.set_setting('cc_unlink_transactions', str(new_unlink))
         st.rerun()
 
     st.divider()

@@ -15,7 +15,8 @@ class LoanService:
             SELECT id, person_name, amount, loan_type, interest_rate,
                    start_date, due_date, emi_amount, emi_active,
                    tenure, emi_start_date,
-                   status, remaining_amount, notes
+                   status, remaining_amount, notes,
+                   (SELECT COUNT(*) FROM loan_payments WHERE loan_id = loans.id AND status = 'pending') as remaining_tenure
             FROM loans
         """
         params = ()
@@ -29,15 +30,22 @@ class LoanService:
                 "id", "person_name", "amount", "loan_type", "interest_rate",
                 "start_date", "due_date", "emi_amount", "emi_active",
                 "tenure", "emi_start_date",
-                "status", "remaining_amount", "notes"
+                "status", "remaining_amount", "notes", "remaining_tenure"
             ])
         return pd.DataFrame(columns=[
             "id", "person_name", "amount", "loan_type", "interest_rate",
             "start_date", "due_date", "emi_amount", "emi_active",
             "tenure", "emi_start_date",
-            "status", "remaining_amount", "notes"
+            "status", "remaining_amount", "notes", "remaining_tenure"
         ])
-
+    
+    @staticmethod
+    def get_active_emi_stats():
+        """Get stats for all active loan EMIs."""
+        res = db.execute("SELECT id, emi_amount FROM loans WHERE emi_active = 1 AND status != 'paid'")
+        if res and res.rows:
+            return pd.DataFrame(res.rows, columns=["id", "Monthly"])
+        return pd.DataFrame(columns=["id", "Monthly"])
     @staticmethod
     def get_loan_by_id(loan_id):
         """Get a single loan by ID."""
