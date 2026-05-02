@@ -36,5 +36,5 @@ class GoalService:
         )
 
     @staticmethod
-    def delete_goal(goal_id):
-        db.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+    def delete_goal(goal_id, user_id):
+        db.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id))

@@ -48,5 +48,5 @@ class BudgetService:
         )
 
     @staticmethod
-    def delete_budget(budget_id):
-        db.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
+    def delete_budget(budget_id, user_id):
+        db.execute("DELETE FROM budgets WHERE id = ? AND user_id = ?", (budget_id, user_id))

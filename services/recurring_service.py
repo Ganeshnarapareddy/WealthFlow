@@ -34,8 +34,8 @@ class RecurringService:
         )
 
     @staticmethod
-    def delete_subscription(sub_id):
-        db.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
+    def delete_subscription(sub_id, user_id):
+        db.execute("DELETE FROM subscriptions WHERE id = ? AND user_id = ?", (sub_id, user_id))
 
     @staticmethod
     def _next_cycle(start, cycle):

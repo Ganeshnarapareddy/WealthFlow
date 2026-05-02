@@ -200,7 +200,7 @@ def nav_to(p):
     st.rerun()
 
 # Delete confirmation helper
-def render_delete_button(item_id, button_key, delete_func, item_name="item"):
+def render_delete_button(item_id, button_key, delete_func, user_id, item_name="item"):
     conf_key = f"del_conf_{item_id}"
     if conf_key not in st.session_state['delete_confirm']:
         st.session_state['delete_confirm'][conf_key] = False
@@ -214,7 +214,7 @@ def render_delete_button(item_id, button_key, delete_func, item_name="item"):
         c1, c2 = st.columns(2)
         with c1:
             if st.button("✅ Yes", key=f"yes_{item_id}"):
-                delete_func(item_id)
+                delete_func(item_id, user_id)
                 st.session_state['delete_confirm'][conf_key] = False
                 # Set delete flag for popup
                 if "cdel_" in button_key: st.session_state['card_deleted'] = True
@@ -783,10 +783,10 @@ elif page == "Transactions":
                 with c3:
                     if st.button("🗑️", key=f"del_txn_{row['ID']}_{row['Source']}"):
                         if row['Source'] == 'main':
-                            FinanceService.delete_transaction(row['ID'])
+                            FinanceService.delete_transaction(row['ID'], uid)
                             st.session_state['txn_deleted'] = True
                         else:
-                            CreditCardService.delete_transaction(row['ID'])
+                            CreditCardService.delete_transaction(row['ID'], uid)
                             st.session_state['card_txn_deleted'] = True
                         st.rerun()
                 st.divider()
@@ -824,7 +824,7 @@ elif page == "Budgets":
                 st.progress(min(1.0, row['Progress']))
                 st.caption(f"{fmt(row['Spent'])} of {fmt(row['Limit'])}")
             with c2:
-                render_delete_button(row['id'], f"del_{row['id']}", BudgetService.delete_budget, "this budget")
+                render_delete_button(row['id'], f"del_{row['id']}", BudgetService.delete_budget, uid, "this budget")
     else: empty_state("No Budgets", "Track your spending.")
 
 elif page == "Subscriptions":
@@ -859,7 +859,7 @@ elif page == "Subscriptions":
             with c2: st.markdown(f"**{fmt(row['Amount'])}**")
             with c3: st.caption(f"**{cycle_display}**")
             with c4:
-                render_delete_button(row['id'], f"sdel_{row['id']}", RecurringService.delete_subscription, row['Name'])
+                render_delete_button(row['id'], f"sdel_{row['id']}", RecurringService.delete_subscription, uid, row['Name'])
             st.divider()
 
 elif page == "Loans":
@@ -984,7 +984,7 @@ elif page == "Loans":
                         st.session_state['edit_loan_id'] = row['id']
                         st.rerun()
                 with c_del:
-                    render_delete_button(row['id'], f"ldel_g_{row['id']}", LoanService.delete_loan, row['person_name'])
+                    render_delete_button(row['id'], f"ldel_g_{row['id']}", LoanService.delete_loan, uid, row['person_name'])
                 st.divider()
         else:
             empty_state("No Loans Given", "Lend money to track here.")
@@ -1064,7 +1064,7 @@ elif page == "Loans":
                         st.session_state['edit_loan_id'] = row['id']
                         st.rerun()
                 with c_del:
-                    render_delete_button(row['id'], f"ldel_t_{row['id']}", LoanService.delete_loan, row['person_name'])
+                    render_delete_button(row['id'], f"ldel_t_{row['id']}", LoanService.delete_loan, uid, row['person_name'])
                 st.divider()
         else:
             empty_state("No Loans Taken", "Borrow money to track here.")
@@ -1171,7 +1171,7 @@ elif page == "Credit Cards":
                         CreditCardService.sync_card_balance(card['id'])
                         st.rerun()
                 with c5:
-                    render_delete_button(card['id'], f"cdel_{card['id']}", CreditCardService.delete_card, card['name'])
+                    render_delete_button(card['id'], f"cdel_{card['id']}", CreditCardService.delete_card, uid, card['name'])
 
                 # Add transaction form
                 st.markdown("**Transactions & EMIs**")
@@ -1281,7 +1281,7 @@ elif page == "Credit Cards":
                                 cy, cn = st.columns(2)
                                 with cy:
                                     if st.button("✅", key=f"y_{row['id']}", help="Confirm Delete"):
-                                        CreditCardService.delete_transaction(row['id'], description=row['description'], amount=row['amount'])
+                                        CreditCardService.delete_transaction(row['id'], uid, description=row['description'], amount=row['amount'])
                                         st.session_state[conf_key] = False
                                         st.session_state['card_txn_deleted'] = True
                                         st.rerun()
@@ -1342,7 +1342,7 @@ elif page == "Goals":
                     else:
                         st.warning("Enter a valid amount")
             with gc3:
-                render_delete_button(row['id'], f"gdel_{row['id']}", GoalService.delete_goal, row['Name'])
+                render_delete_button(row['id'], f"gdel_{row['id']}", GoalService.delete_goal, uid, row['Name'])
             st.divider()
 
 elif page == "Assets":
@@ -1386,7 +1386,7 @@ elif page == "Assets":
                     st.session_state['edit_asset_id'] = row['id']
                     st.rerun()
             with ac4:
-                render_delete_button(row['id'], f"adel_{row['id']}", AssetService.delete_asset, row['Name'])
+                render_delete_button(row['id'], f"adel_{row['id']}", AssetService.delete_asset, uid, row['Name'])
             st.divider()
 
 elif page == "Settings":

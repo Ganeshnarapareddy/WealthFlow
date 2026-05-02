@@ -176,9 +176,9 @@ class LoanService:
         db.execute("UPDATE loans SET status = ? WHERE id = ?", (status, loan_id))
 
     @staticmethod
-    def delete_loan(loan_id):
-        db.execute("DELETE FROM loan_payments WHERE loan_id = ?", (loan_id,))
-        db.execute("DELETE FROM loans WHERE id = ?", (loan_id,))
+    def delete_loan(loan_id, user_id):
+        db.execute("DELETE FROM loan_payments WHERE loan_id IN (SELECT id FROM loans WHERE id = ? AND user_id = ?)", (loan_id, user_id))
+        db.execute("DELETE FROM loans WHERE id = ? AND user_id = ?", (loan_id, user_id))
 
     @staticmethod
     def update_loan(loan_id, person_name, amount, interest_rate, start_date, due_date, 

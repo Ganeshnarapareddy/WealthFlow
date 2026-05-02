@@ -22,8 +22,8 @@ class AssetService:
         db.execute(query, (name, asset_type, value, asset_id))
 
     @staticmethod
-    def delete_asset(asset_id):
-        db.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+    def delete_asset(asset_id, user_id):
+        db.execute("DELETE FROM assets WHERE id = ? AND user_id = ?", (asset_id, user_id))
 
     @staticmethod
     def get_total_assets_value(user_id):
