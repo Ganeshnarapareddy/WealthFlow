@@ -15,18 +15,21 @@ from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
 from services.auth_service import AuthService
 
+# Session State Initialization
+if "user" not in st.session_state:
+    st.session_state.user = None
+
 # AUTO-REPAIR: Database integrity fixes
 try:
     # Trim usernames
     db.execute("UPDATE wf_users SET username = TRIM(username)")
-    # Set Master Admin ID
-    db.execute("UPDATE wf_users SET short_id = '00001' WHERE username = 'admin' AND (short_id IS NULL OR short_id = 'None')")
+    # Set Master Admin ID and update current session
+    db.execute("UPDATE wf_users SET short_id = '00001' WHERE role = 'admin' AND (short_id IS NULL OR short_id = 'None')")
+    if st.session_state.get('user') and st.session_state.user['role'] == 'admin':
+        if st.session_state.user.get('short_id') in [None, 'None']:
+            st.session_state.user['short_id'] = '00001'
 except Exception:
     pass
-
-# Session State Initialization
-if "user" not in st.session_state:
-    st.session_state.user = None
 
 # Import UI Components
 from components.styles import apply_styles
