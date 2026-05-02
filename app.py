@@ -15,9 +15,12 @@ from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
 from services.auth_service import AuthService
 
-# AUTO-REPAIR: Trim usernames in DB to fix whitespace login issues
+# AUTO-REPAIR: Database integrity fixes
 try:
+    # Trim usernames
     db.execute("UPDATE wf_users SET username = TRIM(username)")
+    # Set Master Admin ID
+    db.execute("UPDATE wf_users SET short_id = '00001' WHERE username = 'admin' AND (short_id IS NULL OR short_id = 'None')")
 except Exception:
     pass
 
