@@ -19,7 +19,7 @@ class FinanceService:
     def is_alert_actioned(alert_id):
         """Check if an alert is actioned for the current month."""
         month_year = datetime.now().strftime("%m-%Y")
-        res = db.execute("SELECT id FROM actioned_alerts WHERE alert_id = ? AND month_year = ?", (alert_id, month_year))
+        res = db.execute("SELECT id FROM actioned_alerts WHERE alert_id = ? AND month_year = ?", (str(alert_id), month_year))
         return True if res and res.rows else False
 
     @staticmethod
@@ -28,8 +28,8 @@ class FinanceService:
         aid = str(uuid.uuid4())
         month_year = datetime.now().strftime("%m-%Y")
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        db.execute("INSERT INTO actioned_alerts (id, alert_id, month_year, actioned_at) VALUES (?, ?, ?, ?)",
-                   (aid, alert_id, month_year, now))
+        db.execute("INSERT OR REPLACE INTO actioned_alerts (id, alert_id, month_year, actioned_at) VALUES (?, ?, ?, ?)",
+                   (aid, str(alert_id), month_year, now))
 
     @staticmethod
     def add_transaction(amount, category_id, description, date_obj, txn_type):
@@ -57,6 +57,13 @@ class FinanceService:
             return tid
         except Exception:
             return None
+
+    @staticmethod
+    def auto_txn_exists(description):
+        """Check if an auto-transaction with this description exists for today."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        res = db.execute("SELECT id FROM transactions WHERE description = ? AND date LIKE ?", (description, f"{today}%"))
+        return True if res and res.rows else False
 
     @staticmethod
     def delete_transaction(tid):
