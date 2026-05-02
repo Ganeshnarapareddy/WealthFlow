@@ -297,6 +297,10 @@ if page == "Dashboard":
     df_loan_emis = LoanService.get_active_emi_stats()
     total_emi_amt = df_cc_emis['Monthly'].sum() + df_loan_emis['Monthly'].sum()
     active_emi_count = len(df_cc_emis) + len(df_loan_emis)
+    
+    # Subscription count
+    df_subs = RecurringService.get_subscriptions()
+    active_subs_count = len(df_subs)
 
     # Subscription comparison
     prev_burn = 0.0
@@ -328,10 +332,12 @@ if page == "Dashboard":
     with a1: card_metric("Savings Rate", f"{savings_rate:.1f}%",
                          delta=sr_delta_str,
                          delta_color="normal")
-    with a2: card_metric("No of EMIs per month", fmt(total_emi_amt),
+    with a2: card_metric("Total EMI per Month", fmt(total_emi_amt),
                          delta=f"{active_emi_count} Active")
-    with a3: card_metric("No of Subscriptions per month", fmt(burn) if burn > 0 else "N/A",
-                         delta=burn_delta_str,
+    with a3: 
+        sub_delta = f"{burn_delta_str} ({active_subs_count} Active)" if burn_delta_str else f"{active_subs_count} Active"
+        card_metric("Total Subscriptions per month", fmt(burn) if burn > 0 else "N/A",
+                         delta=sub_delta,
                          delta_color="inverse")
 
     # --- Credit Card Summary ---
