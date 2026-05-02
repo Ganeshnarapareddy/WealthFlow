@@ -140,7 +140,7 @@ class AuthService:
     @staticmethod
     def get_all_users():
         """List all users (including archived)."""
-        res = db.execute("SELECT id, username, role, email, phone, short_id, status, created_at FROM wf_users ORDER BY created_at DESC")
+        res = db.execute("SELECT id, username, role, email, phone, short_id, status, created_at FROM wf_users ORDER BY (CASE WHEN role = 'admin' THEN 0 ELSE 1 END), created_at DESC")
         if res and res.rows:
             return res.rows
         return []
