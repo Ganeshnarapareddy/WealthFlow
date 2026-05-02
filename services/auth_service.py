@@ -19,10 +19,11 @@ class AuthService:
     @staticmethod
     def login(username, password):
         """Verify credentials and return user dict if successful (only for active users)."""
-        pwd_hash = AuthService.hash_password(password)
+        # Try with current salted format
+        pwd_hash_salted = AuthService.hash_password(password)
         res = db.execute(
             "SELECT id, username, role, email, currency, phone, short_id, status FROM wf_users WHERE username = ? AND password_hash = ? AND status = 'active'",
-            (username, pwd_hash)
+            (username, pwd_hash_salted)
         )
         if res and res.rows:
             row = res.rows[0]
@@ -31,6 +32,23 @@ class AuthService:
                 "email": row[3], "currency": row[4], "phone": row[5],
                 "short_id": row[6], "status": row[7]
             }
+            
+        # Migration path: Try with old unsalted format
+        pwd_hash_unsalted = hashlib.sha256(password.encode()).hexdigest()
+        res_old = db.execute(
+            "SELECT id, username, role, email, currency, phone, short_id, status FROM wf_users WHERE username = ? AND password_hash = ? AND status = 'active'",
+            (username, pwd_hash_unsalted)
+        )
+        if res_old and res_old.rows:
+            row = res_old.rows[0]
+            # Upgrade user to salted format permanently
+            db.execute("UPDATE wf_users SET password_hash = ? WHERE id = ?", (pwd_hash_salted, row[0]))
+            return {
+                "id": row[0], "username": row[1], "role": row[2], 
+                "email": row[3], "currency": row[4], "phone": row[5],
+                "short_id": row[6], "status": row[7]
+            }
+            
         return None
 
     @staticmethod
@@ -72,6 +90,7 @@ class AuthService:
     @staticmethod
     def update_username(user_id, new_username):
         """Allow users/admin to change username."""
+        new_username = new_username.strip()
         # Check if exists
         res = db.execute("SELECT id FROM wf_users WHERE username = ? AND id != ?", (new_username, user_id))
         if res and res.rows: return False
@@ -81,6 +100,7 @@ class AuthService:
     @staticmethod
     def update_profile(user_id, username, email, phone):
         """Update username, email, and phone in one go."""
+        username = username.strip()
         # Check if new username is taken by another user
         res = db.execute("SELECT id FROM wf_users WHERE username = ? AND id != ?", (username, user_id))
         if res and res.rows: return "Username already taken"

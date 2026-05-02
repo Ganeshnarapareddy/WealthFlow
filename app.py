@@ -15,6 +15,12 @@ from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
 from services.auth_service import AuthService
 
+# AUTO-REPAIR: Trim usernames in DB to fix whitespace login issues
+try:
+    db.execute("UPDATE wf_users SET username = TRIM(username)")
+except Exception:
+    pass
+
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -99,7 +105,7 @@ def login_page():
                 elif len(s_user) < 3 or len(s_pass) < 6:
                     st.warning("Username must be >= 3 and Password >= 6 characters")
                 else:
-                    uid_res = AuthService.signup(s_user, s_pass, s_email, s_phone)
+                    uid_res = AuthService.signup(s_user.strip(), s_pass, s_email, s_phone)
                     if isinstance(uid_res, str) and len(uid_res) > 30:
                         st.success("Account created! Please switch to Login tab.")
                     else:
@@ -1494,7 +1500,7 @@ elif page == "Admin" and st.session_state.user['role'] == 'admin':
             new_ph = st.text_input("Phone")
             new_r = st.selectbox("Role", ["user", "admin"])
             if st.form_submit_button("Create"):
-                uid_res = AuthService.signup(new_u, new_p, new_e, new_ph)
+                uid_res = AuthService.signup(new_u.strip(), new_p, new_e, new_ph)
                 if isinstance(uid_res, str) and len(uid_res) > 30:
                     if new_r == 'admin':
                         db.execute("UPDATE wf_users SET role = 'admin' WHERE id = ?", (uid_res,))
