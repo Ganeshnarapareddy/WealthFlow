@@ -738,7 +738,7 @@ elif page == "Transactions":
         with st.form("add_txn_pro", clear_on_submit=True):
             amt = st.number_input("Amount", min_value=0.01, step=1.0, value=None, placeholder="Enter amount")
             dt = st.date_input("Date", value=datetime.now().date())
-            all_cats = FinanceService.get_categories()
+            all_cats = FinanceService.get_categories(uid)
             filtered = all_cats[all_cats['type'] == txn_type]
             cat_opts = {f"{r['icon']} {r['name']}": r['id'] for _, r in filtered.iterrows()}
             cat_sel = st.selectbox("Category", list(cat_opts.keys()) if cat_opts else ["-"])
@@ -806,7 +806,7 @@ elif page == "Budgets":
         st.session_state['budget_added'] = False
     with st.expander("➕ Set New Budget"):
         with st.form("new_budget"):
-            all_cats = FinanceService.get_categories()
+            all_cats = FinanceService.get_categories(uid)
             exp_cats = all_cats[all_cats['type'] == 'Expense']
             cat_opts = {f"{r['icon']} {r['name']}": r['id'] for _, r in exp_cats.iterrows()}
             sel_cat = st.selectbox("Category", list(cat_opts.keys()))
@@ -1468,18 +1468,18 @@ elif page == "Settings":
             cat_type = st.selectbox("Type", ["Income", "Expense"])
             cat_icon = st.text_input("Icon", value="📁")
             if st.form_submit_button("Add Category"):
-                if cat_name:
+                if cat_name.strip():
                     import uuid
                     cid = str(uuid.uuid4())
                     db.execute(
                         "INSERT INTO categories (id, user_id, name, type, icon) VALUES (?, ?, ?, ?, ?)",
-                        (cid, uid, cat_name, cat_type, cat_icon)
+                        (cid, uid, cat_name.strip(), cat_type, cat_icon)
                     )
                     st.session_state["cat_added"] = True
                     st.rerun()
 
     # List Existing Categories
-    df_cats = FinanceService.get_categories()
+    df_cats = FinanceService.get_categories(uid)
     if not df_cats.empty:
         for _, row in df_cats.iterrows():
             c1, c2 = st.columns([4, 1])
