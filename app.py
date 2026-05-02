@@ -382,43 +382,51 @@ if page == "Dashboard":
     # 1. Subscriptions
     subs = RecurringService.get_upcoming_renewals(30)
     for s in subs:
-        all_alerts.append({
-            'category': 'Subscription',
-            'days': s['days_left'],
-            'date': s['next_date'].strftime("%d %b"),
-            'name': s['name'],
-            'amount': s['amount'],
-            'id': f"sub_{s['id']}_{datetime.now().strftime('%m%Y')}",
-            'icon': "💳"
-        })
+        aid = f"sub_{s['id']}"
+        auto_desc = f"Auto: {s['name']}"
+        if not FinanceService.is_alert_actioned(aid) and not FinanceService.auto_txn_exists(auto_desc):
+            all_alerts.append({
+                'category': 'Subscription',
+                'days': s['days_left'],
+                'date': s['next_date'].strftime("%d %b"),
+                'name': s['name'],
+                'amount': s['amount'],
+                'id': aid,
+                'icon': "💳"
+            })
         
     # 2. Loans
     loan_alerts = LoanService.get_upcoming_dues(30)
     for l in loan_alerts:
-        all_alerts.append({
-            'category': 'Loan',
-            'days': l['days_left'],
-            'date': datetime.strptime(l['due_date'], "%Y-%m-%d").strftime("%d %b"),
-            'name': f"{l['person_name']} ({'Given' if l['loan_type'] == 'given' else 'Taken'})",
-            'amount': l['remaining'],
-            'id': l['id'],
-            'icon': "💰"
-        })
+        auto_desc = f"Auto: {l['person_name']}"
+        if not FinanceService.auto_txn_exists(auto_desc):
+            all_alerts.append({
+                'category': 'Loan',
+                'days': l['days_left'],
+                'date': datetime.strptime(l['due_date'], "%Y-%m-%d").strftime("%d %b"),
+                'name': f"{l['person_name']} ({'Given' if l['loan_type'] == 'given' else 'Taken'})",
+                'amount': l['remaining'],
+                'id': l['id'],
+                'icon': "💰",
+                'is_emi': l.get('is_emi', False)
+            })
         
     # 3. CC EMIs
     emi_alerts = CreditCardService.get_upcoming_emi_payments(30)
     for _, e in emi_alerts.iterrows():
         due_dt = datetime.strptime(e['Due Date'], "%Y-%m-%d").date()
         days = (due_dt - datetime.now().date()).days
-        all_alerts.append({
-            'category': 'EMI',
-            'days': days,
-            'date': due_dt.strftime("%d %b"),
-            'name': f"{e['Description']} ({e['Card']})",
-            'amount': e['Amount'],
-            'id': e['id'],
-            'icon': "🗓️"
-        })
+        auto_desc = f"Auto: {e['Description']}"
+        if not FinanceService.auto_txn_exists(auto_desc):
+            all_alerts.append({
+                'category': 'EMI',
+                'days': days,
+                'date': due_dt.strftime("%d %b"),
+                'name': f"{e['Description']} ({e['Card']})",
+                'amount': e['Amount'],
+                'id': e['id'],
+                'icon': "🗓️"
+            })
         
     # 4. CC Bills
     card_alerts = CreditCardService.get_upcoming_bills(15)
@@ -445,14 +453,16 @@ if page == "Dashboard":
                 amt_fmt = fmt(a['amount'])
                 cat = a['category']
                 
-                c1, c2 = st.columns([0.85, 0.15])
+                # Use a single column for better visibility of buttons on mobile/small screens
+                msg = f"{a['icon']} **{a['name']}** "
+                dt = f"`{a['date']}`"
+                
+                c1, c2 = st.columns([0.75, 0.25])
                 with c1:
-                    msg = f"{a['icon']} **{a['name']}** "
-                    dt = f"`{a['date']}`"
-                    if days <= 0:
-                        st.error(f"🔴 {msg} — **DUE NOW** {dt}! ({amt_fmt})")
-                    elif days == 1:
-                        st.warning(f"🟡 {msg} — **DUE TOMORROW** {dt}! ({amt_fmt})")
+                    if days <= 2:
+                        st.error(f"🔴 {msg} — **DUE SOON** {dt}! ({amt_fmt})")
+                    elif days <= 5:
+                        st.warning(f"🟠 {msg} — in **{days} days** {dt} ({amt_fmt})")
                     elif days <= 7:
                         st.info(f"🟢 {msg} — in **{days} days** {dt} ({amt_fmt})")
                     else:
@@ -460,16 +470,28 @@ if page == "Dashboard":
                 
                 with c2:
                     if cat == 'Subscription':
-                        is_done = FinanceService.is_alert_actioned(a['id'])
-                        if st.checkbox("Done", value=is_done, key=f"chk_{a['id']}"):
-                            if not is_done:
-                                FinanceService.mark_alert_actioned(a['id'])
-                                st.rerun()
+                        if st.button("Paid", key=f"btn_sub_{a['id']}", use_container_width=True):
+                            FinanceService.mark_alert_actioned(a['id'])
+                            FinanceService.add_transaction(
+                                amount=a['amount'],
+                                category_id="14",
+                                description=f"Auto: {a['name']}",
+                                date_obj=datetime.now(),
+                                txn_type="Expense"
+                            )
+                            st.rerun()
                     elif cat == 'EMI':
-                        if st.checkbox("Paid", key=f"emi_chk_{a['id']}"):
+                        if st.button("Paid", key=f"btn_cc_emi_{a['id']}", use_container_width=True):
                             CreditCardService.mark_emi_paid(a['id'])
                             st.rerun()
-                    # For Loans and Bills, add action logic if needed in future
+                    elif cat == 'Loan':
+                        btn_label = "Received" if "Given" in a['name'] else "Paid"
+                        if st.button(btn_label, key=f"btn_loan_{a['id']}", use_container_width=True):
+                            if a.get('is_emi'):
+                                LoanService.toggle_payment_status(a['id'], "pending")
+                            else:
+                                LoanService.update_loan_status(a['id'], 'paid')
+                            st.rerun()
             st.divider()
 
     st.markdown("<br>", unsafe_allow_html=True)
