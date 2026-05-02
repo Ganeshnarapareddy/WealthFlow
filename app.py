@@ -77,46 +77,51 @@ def login_page():
                 user = AuthService.login(user_in.strip(), pass_in)
                 if user:
                     st.session_state.user = user
-                    # Repair any orphaned data to the current user
-                    FinanceService.repair_legacy_data(user['id'])
+                    # Load saved currency preference
+                    saved_sym = FinanceService.get_setting('currency_symbol', '₹', user['id'])
+                    st.session_state['sym'] = saved_sym
+                    # ULTIMATE SAFETY: Only allow the admin account to trigger the data repair/claim logic.
+                    if user['username'] == 'admin':
+                        FinanceService.repair_legacy_data(user['id'])
                     st.rerun()
                 else:
                     st.error("Invalid username or password")
-                    # Debug Info (Temporary)
-                    with st.expander("Debug Details"):
-                        st.write(f"Attempting login for: {user_in.strip()}")
-                        import hashlib
-                        h = hashlib.sha256(pass_in.encode()).hexdigest()
-                        st.write(f"Password Hash: {h}")
-                        from database import db
-                        res = db.execute("SELECT COUNT(*) FROM wf_users")
-                        st.write(f"Total Users in DB: {res.rows[0][0] if res else 'Error'}")
-                        res2 = db.execute("SELECT id, username, password_hash FROM wf_users WHERE username = ?", (user_in.strip(),))
-                        if res2 and res2.rows:
-                            st.write(f"Found User: {res2.rows[0][1]} with hash {res2.rows[0][2]}")
-                        else:
-                            st.write("User not found in DB")
                     
         with tab_signup:
             s_user = st.text_input("Choose Username", key="s_user")
             s_pass = st.text_input("Choose Password", type="password", key="s_pass")
-            s_email = st.text_input("Email (Optional)", key="s_email")
+            s_email = st.text_input("Email", key="s_email")
+            s_phone = st.text_input("Phone Number", key="s_phone")
+            st.info("💡 Providing Email or Phone ensures your data can be recovered if you delete your account.")
             if st.button("Create Account", use_container_width=True):
-                if len(s_user) < 3 or len(s_pass) < 6:
+                if not s_email and not s_phone:
+                    st.error("Email or Phone is mandatory for account recovery.")
+                elif len(s_user) < 3 or len(s_pass) < 6:
                     st.warning("Username must be >= 3 and Password >= 6 characters")
                 else:
-                    uid = AuthService.signup(s_user, s_pass, s_email)
-                    if uid:
+                    uid_res = AuthService.signup(s_user, s_pass, s_email, s_phone)
+                    if isinstance(uid_res, str) and len(uid_res) > 30:
                         st.success("Account created! Please switch to Login tab.")
                     else:
-                        st.error("Username already taken")
+                        st.error(str(uid_res))
                         
         with tab_forgot:
-            f_user = st.text_input("Username", key="f_user")
+            st.markdown("### 🔐 Secure Recovery")
+            st.caption("Enter your registered Email or Phone to reset your password.")
+            f_contact = st.text_input("Registered Email or Phone", key="f_contact")
             f_pass = st.text_input("New Password", type="password", key="f_pass")
-            if st.button("Update Password", use_container_width=True):
-                AuthService.reset_password(f_user, f_pass)
-                st.success("Password updated successfully!")
+            if st.button("Verify & Reset Password", use_container_width=True):
+                if not f_contact:
+                    st.error("Please enter your contact info.")
+                else:
+                    from database import db
+                    # Find user by email or phone
+                    res = db.execute("SELECT id FROM wf_users WHERE (email = ? OR phone = ?) AND status = 'active'", (f_contact, f_contact))
+                    if res and res.rows:
+                        AuthService.update_password(res.rows[0][0], f_pass)
+                        st.success("Password updated successfully! Please login.")
+                    else:
+                        st.error("Contact information not found.")
         
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -128,7 +133,11 @@ if not st.session_state.user:
 uid = st.session_state.user['id']
 
 # Initialize Session State
-if 'sym' not in st.session_state: st.session_state['sym'] = '₹'
+if 'sym' not in st.session_state:
+    if st.session_state.user:
+        st.session_state['sym'] = FinanceService.get_setting('currency_symbol', '₹', st.session_state.user['id'])
+    else:
+        st.session_state['sym'] = '₹'
 if 'edit_asset_id' not in st.session_state: st.session_state['edit_asset_id'] = None
 if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
 if 'show_menu' not in st.session_state: st.session_state['show_menu'] = False
@@ -289,6 +298,28 @@ def fmt(val):
 page = st.session_state['page']
 
 if page == "Dashboard":
+    # Top Profile Bar
+    t1, t2 = st.columns([0.85, 0.15])
+    with t2:
+        with st.popover("👤 Profile", use_container_width=True):
+            st.markdown(f"**Username:** `{st.session_state.user['username']}`")
+            # Safety check for short_id in existing sessions
+            sid_display = st.session_state.user.get('short_id', '58184')
+            st.markdown(f"**System ID:** `{sid_display}`")
+            st.markdown("---")
+            new_name = st.text_input("Change Username", value=st.session_state.user['username'])
+            if st.button("Update Name", use_container_width=True):
+                if AuthService.update_username(uid, new_name):
+                    st.session_state.user['username'] = new_name
+                    st.success("Name updated!")
+                    st.rerun()
+                else:
+                    st.error("Name already taken")
+            st.markdown("---")
+            if st.button("Logout", use_container_width=True, type="primary"):
+                st.session_state['user'] = None
+                st.rerun()
+
     h1, h2, h3, h4 = st.columns([2, 1.2, 1.2, 1.2])
     with h1: st.markdown('<h1 class="main-header">Command Center</h1>', unsafe_allow_html=True)
     with h2:
@@ -1353,11 +1384,39 @@ elif page == "Settings":
         st.success("Category added!")
         st.session_state['cat_added'] = False
 
+    # Unified Account Management
+    st.markdown("### 👤 Account Command Center")
+    st.caption("Manage your entire identity and security in one place.")
+    with st.form("unified_profile"):
+        u_name = st.text_input("Username", value=st.session_state.user['username'])
+        u_mail = st.text_input("Email", value=st.session_state.user.get('email', '') or "")
+        u_ph = st.text_input("Phone", value=st.session_state.user.get('phone', '') or "")
+        u_pass = st.text_input("New Password", type="password", placeholder="Leave blank to keep current")
+        
+        if st.form_submit_button("Update All Profile Details", use_container_width=True):
+            # Update Profile Info
+            res = AuthService.update_profile(uid, u_name, u_mail, u_ph)
+            if res is True:
+                st.session_state.user['username'] = u_name
+                st.session_state.user['email'] = u_mail
+                st.session_state.user['phone'] = u_ph
+                
+                # Update Password if provided
+                if u_pass:
+                    AuthService.update_password(uid, u_pass)
+                
+                st.success("Profile and Security updated successfully!")
+                st.rerun()
+            else:
+                st.error(str(res))
+    st.divider()
+
     # Currency Settings
     cur_opts = {"INR (₹)": "₹", "USD ($)": "$", "EUR (€)": "€", "GBP (£)": "£"}
     sel_cur = st.selectbox("Preferred Symbol", list(cur_opts.keys()), index=list(cur_opts.values()).index(st.session_state['sym']))
     if st.button("Save Settings"):
         st.session_state['sym'] = cur_opts[sel_cur]
+        FinanceService.set_setting('currency_symbol', cur_opts[sel_cur], uid)
         st.rerun()
 
     st.divider()
@@ -1401,8 +1460,8 @@ elif page == "Settings":
                     import uuid
                     cid = str(uuid.uuid4())
                     db.execute(
-                        "INSERT INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)",
-                        (cid, cat_name, cat_type, cat_icon)
+                        "INSERT INTO categories (id, user_id, name, type, icon) VALUES (?, ?, ?, ?, ?)",
+                        (cid, uid, cat_name, cat_type, cat_icon)
                     )
                     st.session_state["cat_added"] = True
                     st.rerun()
@@ -1416,8 +1475,13 @@ elif page == "Settings":
                 st.markdown(f"{row['icon']} **{row['name']}** ({row['type']})")
             with c2:
                 if st.button("🗑️", key=f"del_cat_{row['id']}"):
-                    db.execute("DELETE FROM categories WHERE id = ?", (row['id'],))
-                    st.rerun()
+                    # Verify ownership
+                    res = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
+                    if res and res.rows:
+                        db.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
+                        st.rerun()
+                    else:
+                        st.error("Cannot delete system categories.")
 
 elif page == "Admin" and st.session_state.user['role'] == 'admin':
     st.markdown('<h1 class="main-header">User Management</h1>', unsafe_allow_html=True)
@@ -1426,36 +1490,72 @@ elif page == "Admin" and st.session_state.user['role'] == 'admin':
         with st.form("admin_create_user"):
             new_u = st.text_input("Username")
             new_p = st.text_input("Password", type="password")
+            new_e = st.text_input("Email")
+            new_ph = st.text_input("Phone")
             new_r = st.selectbox("Role", ["user", "admin"])
             if st.form_submit_button("Create"):
-                if AuthService.signup(new_u, new_p):
-                    # Update role if admin
+                uid_res = AuthService.signup(new_u, new_p, new_e, new_ph)
+                if isinstance(uid_res, str) and len(uid_res) > 30:
                     if new_r == 'admin':
-                        res = db.execute("SELECT id FROM users WHERE username = ?", (new_u,))
-                        db.execute("UPDATE users SET role = 'admin' WHERE id = ?", (res.rows[0][0],))
+                        db.execute("UPDATE wf_users SET role = 'admin' WHERE id = ?", (uid_res,))
                     st.success("User created!")
                     st.rerun()
                 else:
-                    st.error("Username exists")
+                    st.error(str(uid_res))
 
     st.divider()
     
     users = AuthService.get_all_users()
     for u in users:
-        uid, uname, urole, uemail, ucreated = u
+        uid_raw, uname, urole, uemail, uphone, usid, ustatus, ucreated = u
+        color = "green" if ustatus == 'active' else "red"
         with st.container():
-            c1, c2, c3, c4 = st.columns([2, 1, 2, 1])
-            with c1: st.markdown(f"**{uname}** ({urole})")
-            with c2: st.caption(f"Joined: {ucreated}")
-            with c3:
-                # Password reset for user
-                new_upass = st.text_input("New Pass", type="password", key=f"p_{uid}", placeholder="Leave blank to keep")
-                if st.button("Update", key=f"ub_{uid}"):
-                    AuthService.update_user(uid, uname, urole, new_upass if new_upass else None)
-                    st.success("Updated!")
-            with c4:
-                if uid != "admin": # Prevent deleting self
-                    if st.button("🗑️", key=f"du_{uid}"):
-                        AuthService.delete_user(uid)
+            st.markdown(f"""
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid {color};">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-size: 1.2rem; font-weight: bold;">{uname}</span> 
+                        <span style="color: #94a3b8; font-size: 0.8rem;">(ID: {usid})</span>
+                        <span style="background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; margin-left: 10px;">{ustatus.upper()}</span>
+                    </div>
+                    <div style="color: #94a3b8; font-size: 0.8rem;">{ucreated}</div>
+                </div>
+                <div style="margin-top: 5px; color: #cbd5e1; font-size: 0.9rem;">
+                    📧 {uemail or 'N/A'} | 📱 {uphone or 'N/A'} | 🛡️ {urole}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if ustatus == 'active' and uid_raw != 'admin':
+                    if st.button(f"Archive {uname}", key=f"arch_{uid_raw}"):
+                        AuthService.delete_user(uid_raw)
                         st.rerun()
+                elif ustatus == 'archived':
+                    if st.button(f"✅ Unarchive {uname}", key=f"unarch_{uid_raw}", type="primary"):
+                        AuthService.unarchive_user(uid_raw)
+                        st.rerun()
+            with c2:
+                # Full Profile update for admin
+                u_uname = st.text_input("Username", value=uname, key=f"un_{uid_raw}")
+                u_email = st.text_input("Email", value=uemail or "", key=f"e_{uid_raw}")
+                u_phone = st.text_input("Phone", value=uphone or "", key=f"ph_{uid_raw}")
+                if st.button("Update Profile Info", key=f"uc_{uid_raw}"):
+                    res = AuthService.update_profile(uid_raw, u_uname, u_email, u_phone)
+                    if res is True:
+                        st.success("User Profile updated!")
+                        st.rerun()
+                    else:
+                        st.error(str(res))
+                
+                # Password reset for user
+                new_upass = st.text_input("New Pass", type="password", key=f"p_{uid_raw}", placeholder="Leave blank to keep")
+                if st.button("Update Pass", key=f"btn_p_{uid_raw}"):
+                    if new_upass:
+                        AuthService.update_password(uid_raw, new_upass)
+                        st.success("Password updated!")
+                
+                if st.button("Refresh List", key=f"re_{uid_raw}"):
+                    st.rerun()
         st.divider()

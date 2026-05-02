@@ -56,9 +56,12 @@ class CreditCardService:
         )
 
     @staticmethod
-    def delete_card(card_id):
-        db.execute("DELETE FROM credit_card_transactions WHERE card_id = ?", (card_id,))
-        db.execute("DELETE FROM credit_cards WHERE id = ?", (card_id,))
+    def delete_card(card_id, user_id):
+        # Verify ownership
+        res = db.execute("SELECT id FROM credit_cards WHERE id = ? AND user_id = ?", (card_id, user_id))
+        if res and res.rows:
+            db.execute("DELETE FROM credit_card_transactions WHERE card_id = ? AND user_id = ?", (card_id, user_id))
+            db.execute("DELETE FROM credit_cards WHERE id = ? AND user_id = ?", (card_id, user_id))
 
     @staticmethod
     def add_transaction(user_id, card_id, amount, description, txn_type, txn_date=None, sync_bank=False):
@@ -88,16 +91,16 @@ class CreditCardService:
         )
 
     @staticmethod
-    def delete_transaction(tid):
-        res = db.execute("SELECT amount, txn_type, card_id, linked_txn_id FROM credit_card_transactions WHERE id = ?", (tid,))
+    def delete_transaction(tid, user_id):
+        res = db.execute("SELECT amount, txn_type, card_id, linked_txn_id FROM credit_card_transactions WHERE id = ? AND user_id = ?", (tid, user_id))
         if res and res.rows:
             row = res.rows[0]
             adj = row[0] if row[1] == "expense" else -row[0]
-            db.execute("UPDATE credit_cards SET current_balance = current_balance + ? WHERE id = ?", (adj, row[2]))
+            db.execute("UPDATE credit_cards SET current_balance = current_balance + ? WHERE id = ? AND user_id = ?", (adj, row[2], user_id))
             if row[3]:
                 from services.finance_service import FinanceService
-                FinanceService.delete_transaction(row[3])
-        db.execute("DELETE FROM credit_card_transactions WHERE id = ?", (tid,))
+                FinanceService.delete_transaction(row[3], user_id)
+            db.execute("DELETE FROM credit_card_transactions WHERE id = ? AND user_id = ?", (tid, user_id))
 
     @staticmethod
     def get_card_transactions(card_id, year=None, month=None):

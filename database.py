@@ -160,7 +160,7 @@ class TursoManager:
         # Seed default settings
         self.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('fiscal_month_start_day', '1')")
 
-        # 1. Column Migrations (Must run before user/data handling)
+        # 1. Column Migrations
         try: self.execute("ALTER TABLE wf_users ADD COLUMN password_hash TEXT")
         except: pass
         try: self.execute("ALTER TABLE wf_users ADD COLUMN role TEXT DEFAULT 'user'")
@@ -169,12 +169,20 @@ class TursoManager:
         except: pass
         try: self.execute("ALTER TABLE wf_users ADD COLUMN currency TEXT DEFAULT 'USD'")
         except: pass
+        try: self.execute("ALTER TABLE wf_users ADD COLUMN phone TEXT")
+        except: pass
+        try: self.execute("ALTER TABLE wf_users ADD COLUMN short_id INTEGER")
+        except: pass
+        try: self.execute("ALTER TABLE wf_users ADD COLUMN status TEXT DEFAULT 'active'")
+        except: pass
+        try: self.execute("ALTER TABLE wf_users ADD COLUMN deleted_at TEXT")
+        except: pass
 
         # 1. Add user_id column to ALL tables if missing
         all_app_tables = [
             'transactions', 'credit_card_transactions', 'budgets', 'subscriptions', 
             'goals', 'loans', 'credit_cards', 'assets', 'credit_card_emis', 
-            'credit_card_emi_payments', 'settings', 'actioned_alerts'
+            'credit_card_emi_payments', 'settings', 'actioned_alerts', 'categories'
         ]
         for table in all_app_tables:
             try: self.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
@@ -188,15 +196,18 @@ class TursoManager:
             self.execute("ALTER TABLE settings_new RENAME TO settings")
         except: pass
 
-        # 2. Ensure default admin user exists with admin123
+        # 2. Ensure default admin user exists (Initial setup only)
         try:
-            import hashlib
-            admin_pass_hash = hashlib.sha256("admin123".encode()).hexdigest()
-            now = datetime.now().strftime("%Y-%m-%d %H:%M")
-            self.execute(
-                "INSERT OR REPLACE INTO wf_users (id, username, password_hash, role, created_at, currency) VALUES (?, ?, ?, ?, ?, ?)",
-                ("admin", "admin", admin_pass_hash, "admin", now, "USD")
-            )
+            res = self.execute("SELECT id FROM wf_users WHERE username = 'admin'")
+            if not res or not res.rows:
+                import hashlib
+                SALT = "wealthflow_secure_2026"
+                admin_pass_hash = hashlib.sha256(("admin123" + SALT).encode()).hexdigest()
+                now = datetime.now().strftime("%Y-%m-%d %H:%M")
+                self.execute(
+                    "INSERT INTO wf_users (id, username, password_hash, role, created_at, currency, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
+                    ("admin", "admin", admin_pass_hash, "admin", now, "INR")
+                )
         except Exception as e:
             logger.warning(f"Note: Could not ensure default admin user: {e}")
 
@@ -224,7 +235,7 @@ class TursoManager:
         except Exception as e:
             logger.warning(f"Note: Could not create default admin account (may already exist): {e}")
 
-# @st.cache_resource
+@st.cache_resource
 def get_db_instance(v=3):
     manager = TursoManager()
     manager.initialize_schema()

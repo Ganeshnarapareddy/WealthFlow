@@ -9,8 +9,11 @@ class FinanceService:
     """Core financial operations — transactions, categories, analytics."""
 
     @staticmethod
-    def get_categories():
-        res = db.execute("SELECT id, name, type, icon FROM categories ORDER BY name")
+    def get_categories(user_id=None):
+        if user_id:
+            res = db.execute("SELECT id, name, type, icon FROM categories WHERE user_id IS NULL OR user_id = ? ORDER BY name", (user_id,))
+        else:
+            res = db.execute("SELECT id, name, type, icon FROM categories WHERE user_id IS NULL ORDER BY name")
         if res and res.rows:
             return pd.DataFrame(res.rows, columns=["id", "name", "type", "icon"])
         return pd.DataFrame(columns=["id", "name", "type", "icon"])
@@ -56,13 +59,13 @@ class FinanceService:
         return True if res and res.rows else False
 
     @staticmethod
-    def delete_transaction(tid):
-        res = db.execute("SELECT amount, type, account_id FROM transactions WHERE id = ?", (tid,))
+    def delete_transaction(tid, user_id):
+        res = db.execute("SELECT amount, type, account_id FROM transactions WHERE id = ? AND user_id = ?", (tid, user_id))
         if res and res.rows:
             amount, txn_type, account_id = res.rows[0]
             adj = -amount if txn_type == "Income" else amount
             db.execute("UPDATE accounts SET balance = balance + ? WHERE id = ?", (adj, account_id))
-            db.execute("DELETE FROM transactions WHERE id = ?", (tid,))
+            db.execute("DELETE FROM transactions WHERE id = ? AND user_id = ?", (tid, user_id))
 
     @staticmethod
     def get_filtered_transactions(user_id, year=None, month=None, day=None, txn_type=None, limit=100):
@@ -320,13 +323,19 @@ class FinanceService:
 
     @staticmethod
     def get_fiscal_data(user_id, year, month, start_day):
-        """Fetch transaction data for a specific fiscal month with Python-side filtering for reliability."""
-        # Calculate date range
-        start_date_str = date(int(year), month, start_day).strftime("%Y-%m-%d")
-        if month == 12:
-            end_date_str = (date(int(year) + 1, 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
+        """Fetch transaction data for a specific fiscal month or 'All' months."""
+        if month == "All":
+            # Year-wide range
+            start_date_str = f"{year}-01-01"
+            end_date_str = f"{year}-12-31"
         else:
-            end_date_str = (date(int(year), month + 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
+            # Specific month range
+            m_int = int(month)
+            start_date_str = date(int(year), m_int, start_day).strftime("%Y-%m-%d")
+            if m_int == 12:
+                end_date_str = (date(int(year) + 1, 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
+            else:
+                end_date_str = (date(int(year), m_int + 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
             
         # Pull ALL transactions for this user and filter in Python to avoid SQLite date issues
         query = """
@@ -342,7 +351,9 @@ class FinanceService:
         
         if res and res.rows:
             for r in res.rows:
-                amt, dt, t_type = float(r[0]), str(r[1])[:10], str(r[2]).upper()
+                # Safety check for NULL values
+                val = r[0] if r[0] is not None else 0.0
+                amt, dt, t_type = float(val), str(r[1])[:10], str(r[2] or 'Expense').upper()
                 if start_date_str <= dt <= end_date_str:
                     if t_type == 'INCOME':
                         inc += amt
@@ -357,7 +368,12 @@ class FinanceService:
         tables = ['transactions', 'credit_card_transactions', 'accounts', 'budgets', 'subscriptions', 'goals', 'assets', 'loans', 'credit_cards']
         for t in tables:
             try:
-                db.execute(f"UPDATE {t} SET user_id = ? WHERE user_id IS NULL OR user_id = 'default_user' OR user_id = '' OR user_id = 'admin'", (user_id,))
+                if user_id == "admin":
+                    # Admin can claim everything that is orphan or legacy 'admin' tag
+                    db.execute(f"UPDATE {t} SET user_id = ? WHERE user_id IS NULL OR user_id = 'default_user' OR user_id = '' OR user_id = 'admin'", (user_id,))
+                else:
+                    # Normal users can ONLY claim truly orphan data, NEVER 'admin' data
+                    db.execute(f"UPDATE {t} SET user_id = ? WHERE user_id IS NULL OR user_id = 'default_user' OR user_id = ''", (user_id,))
             except: pass
             
         # Fix category mapping mix-ups
