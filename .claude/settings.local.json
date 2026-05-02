@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile app.py)",
+      "Bash(python -m py_compile services/finance_service.py)",
+      "Bash(python -m py_compile services/recurring_service.py)",
+      "Bash(python -m py_compile database.py)",
+      "Bash(python -c \"from services.finance_service import FinanceService; from services.recurring_service import RecurringService; from services.budget_service import BudgetService; from services.goal_service import GoalService; from services.asset_service import AssetService; print\\('All imports OK'\\)\")",
+      "Bash(python -m py_compile services/budget_service.py)",
+      "Bash(python -m py_compile services/goal_service.py)",
+      "Bash(python -m py_compile services/asset_service.py)",
+      "Bash(python *)",
+      "Bash(sed -n '227p' app.py)",
+      "Bash(sed -n '305p' services/finance_service.py)",
+      "Bash(streamlit run *)",
+      "Bash(git show *)",
+      "Read(//tmp/**)",
+      "Bash(git checkout *)",
+      "Bash(pip show *)",
+      "Bash(sed -i 's/billing_date/billing_date/g' services/credit_card_service.py)",
+      "Bash(sed -i 's/closing_date/closing_date/g' services/credit_card_service.py)",
+      "Bash(gh api *)",
+      "Bash(cygpath -w /tmp/openrouter-proxy)",
+      "Bash(node proxy.js)"
+    ]
+  }
+}

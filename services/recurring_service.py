@@ -8,10 +8,10 @@ class RecurringService:
     """Subscription tracking with automatic next-date projection."""
 
     @staticmethod
-    def get_subscriptions():
+    def get_subscriptions(user_id):
         res = db.execute(
             "SELECT id, name, amount, billing_cycle, start_date, next_billing_date, category, icon "
-            "FROM subscriptions ORDER BY name"
+            "FROM subscriptions WHERE user_id = ? ORDER BY name", (user_id,)
         )
         if res and res.rows:
             return pd.DataFrame(
@@ -23,14 +23,14 @@ class RecurringService:
         )
 
     @staticmethod
-    def add_subscription(name, amount, cycle, bill_date, icon="💳", category="Subscriptions"):
+    def add_subscription(user_id, name, amount, cycle, bill_date, icon="💳", category="Subscriptions"):
         next_date = RecurringService._next_cycle(bill_date, cycle)
         sid = str(uuid.uuid4())
         db.execute(
             "INSERT INTO subscriptions "
-            "(id, name, amount, billing_cycle, start_date, next_billing_date, category, icon) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (sid, name, amount, cycle, str(bill_date), str(next_date), category, icon),
+            "(id, user_id, name, amount, billing_cycle, start_date, next_billing_date, category, icon) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (sid, user_id, name, amount, cycle, str(bill_date), str(next_date), category, icon),
         )
 
     @staticmethod
@@ -62,14 +62,13 @@ class RecurringService:
         try:
             return start_date.replace(year=y, month=m)
         except ValueError:
-            # Handle end of month issues
             return (start_date.replace(day=1, month=m, year=y) + timedelta(days=31)).replace(day=1) - timedelta(days=1)
 
     @staticmethod
-    def get_upcoming_renewals(days_ahead=30):
-        """Return subscriptions with days left until next billing."""
+    def get_upcoming_renewals(user_id, days_ahead=30):
+        """Return subscriptions for a user with days left until next billing."""
         res = db.execute(
-            "SELECT id, name, amount, billing_cycle, next_billing_date FROM subscriptions"
+            "SELECT id, name, amount, billing_cycle, next_billing_date FROM subscriptions WHERE user_id = ?", (user_id,)
         )
         if not res or not res.rows:
             return []
@@ -85,83 +84,56 @@ class RecurringService:
                         "id": sid, "name": name, "amount": amount,
                         "cycle": cycle, "days_left": days_left, "next_date": next_date
                     })
-            except Exception:
-                continue
+            except Exception: continue
         return sorted(alerts, key=lambda x: x['days_left'])
 
     @staticmethod
-    def get_monthly_recurring_total():
-        res = db.execute("SELECT amount, billing_cycle FROM subscriptions")
-        if not res or not res.rows:
-            return 0.0
-
+    def get_monthly_recurring_total(user_id):
+        res = db.execute("SELECT amount, billing_cycle FROM subscriptions WHERE user_id = ?", (user_id,))
+        if not res or not res.rows: return 0.0
         total = 0.0
         for amt, cycle in res.rows:
-            if cycle == "Monthly":
-                total += amt
-            elif cycle == "Quarterly":
-                total += amt / 3
-            elif cycle == "6 Months":
-                total += amt / 6
-            elif cycle == "Yearly":
-                total += amt / 12
+            if cycle == "Monthly": total += amt
+            elif cycle == "Quarterly": total += amt / 3
+            elif cycle == "6 Months": total += amt / 6
+            elif cycle == "Yearly": total += amt / 12
             elif cycle.startswith("Custom:"):
                 try:
                     months = int(cycle.split(":")[1])
                     total += amt / months
-                except (ValueError, IndexError):
-                    pass
+                except: pass
         return total
 
     @staticmethod
-    def get_monthly_recurring_total_for_period(year, month):
-        """Get monthly recurring total for a specific period (based on subscriptions active at that time)."""
-        # Get the end date of the period
-        if month == 12:
-            next_month = f"{year + 1}-01-01"
-        else:
-            next_month = f"{year}-{month + 1:02d}-01"
+    def get_monthly_recurring_total_for_period(user_id, year, month):
+        if month == 12: next_month = f"{year + 1}-01-01"
+        else: next_month = f"{year}-{month + 1:02d}-01"
 
         res = db.execute(
-            "SELECT amount, billing_cycle FROM subscriptions WHERE start_date < ?",
-            (next_month,)
+            "SELECT amount, billing_cycle FROM subscriptions WHERE user_id = ? AND start_date < ?",
+            (user_id, next_month)
         )
-        if not res or not res.rows:
-            return 0.0
-
+        if not res or not res.rows: return 0.0
         total = 0.0
         for amt, cycle in res.rows:
-            if cycle == "Monthly":
-                total += amt
-            elif cycle == "Quarterly":
-                total += amt / 3
-            elif cycle == "6 Months":
-                total += amt / 6
-            elif cycle == "Yearly":
-                total += amt / 12
+            if cycle == "Monthly": total += amt
+            elif cycle == "Quarterly": total += amt / 3
+            elif cycle == "6 Months": total += amt / 6
+            elif cycle == "Yearly": total += amt / 12
             elif cycle.startswith("Custom:"):
                 try:
                     months = int(cycle.split(":")[1])
                     total += amt / months
-                except (ValueError, IndexError):
-                    pass
+                except: pass
         return total
 
     @staticmethod
     def format_cycle(cycle):
-        """Format billing cycle for display."""
-        if cycle == "Monthly":
-            return "Monthly"
-        elif cycle == "Quarterly":
-            return "Quarterly"
-        elif cycle == "6 Months":
-            return "6 Months"
-        elif cycle == "Yearly":
-            return "Yearly"
+        if cycle == "Monthly": return "Monthly"
+        elif cycle == "Quarterly": return "Quarterly"
+        elif cycle == "6 Months": return "6 Months"
+        elif cycle == "Yearly": return "Yearly"
         elif cycle.startswith("Custom:"):
-            try:
-                months = cycle.split(":")[1]
-                return f"{months} Months"
-            except IndexError:
-                return "Custom"
+            try: return f"{cycle.split(':')[1]} Months"
+            except: return "Custom"
         return cycle

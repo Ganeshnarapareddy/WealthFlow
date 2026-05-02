@@ -7,9 +7,9 @@ class GoalService:
     """Piggy-bank savings tracker with custom emoji support."""
 
     @staticmethod
-    def get_goals():
+    def get_goals(user_id):
         res = db.execute(
-            "SELECT id, name, target_amount, current_amount, deadline, icon FROM goals"
+            "SELECT id, name, target_amount, current_amount, deadline, icon FROM goals WHERE user_id = ?", (user_id,)
         )
         if res and res.rows:
             return pd.DataFrame(
@@ -20,12 +20,12 @@ class GoalService:
         )
 
     @staticmethod
-    def add_goal(name, target, deadline, icon="🎯"):
+    def add_goal(user_id, name, target, deadline, icon="🎯"):
         gid = str(uuid.uuid4())
         db.execute(
-            "INSERT INTO goals (id, name, target_amount, current_amount, deadline, icon) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (gid, name, target, 0.0, str(deadline), icon),
+            "INSERT INTO goals (id, user_id, name, target_amount, current_amount, deadline, icon) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (gid, user_id, name, target, 0.0, str(deadline), icon),
         )
 
     @staticmethod

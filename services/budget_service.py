@@ -7,7 +7,7 @@ class BudgetService:
     """Monthly budget limits with smart-alert progress tracking."""
 
     @staticmethod
-    def get_monthly_budgets(month=None, year=None):
+    def get_monthly_budgets(user_id, month=None, year=None):
         from datetime import datetime
         now = datetime.now()
         month = month or now.month
@@ -18,13 +18,13 @@ class BudgetService:
             SELECT b.id, c.name, c.icon, b.amount_limit,
                    COALESCE(
                        (SELECT SUM(t.amount) FROM transactions t
-                        WHERE t.category_id = c.id AND t.type='Expense' AND t.date LIKE ?), 0
+                        WHERE t.user_id = ? AND t.category_id = c.id AND t.type='Expense' AND t.date LIKE ?), 0
                    ) AS spent
             FROM budgets b
             JOIN categories c ON b.category_id = c.id
-            WHERE b.month = ? AND b.year = ?
+            WHERE b.user_id = ? AND b.month = ? AND b.year = ?
         """
-        res = db.execute(query, (pattern, month, year))
+        res = db.execute(query, (user_id, pattern, user_id, month, year))
         if res and res.rows:
             rows = []
             for r in res.rows:
@@ -40,11 +40,11 @@ class BudgetService:
         return pd.DataFrame(columns=["id", "Category", "Limit", "Spent", "Remaining", "Progress"])
 
     @staticmethod
-    def add_budget(category_id, amount_limit, month, year):
+    def add_budget(user_id, category_id, amount_limit, month, year):
         bid = str(uuid.uuid4())
         db.execute(
-            "INSERT INTO budgets (id, category_id, amount_limit, month, year) VALUES (?, ?, ?, ?, ?)",
-            (bid, category_id, amount_limit, month, year),
+            "INSERT INTO budgets (id, user_id, category_id, amount_limit, month, year) VALUES (?, ?, ?, ?, ?, ?)",
+            (bid, user_id, category_id, amount_limit, month, year),
         )
 
     @staticmethod
