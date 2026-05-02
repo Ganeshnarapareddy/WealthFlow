@@ -209,9 +209,9 @@ class CreditCardService:
         """Add an EMI and its payment schedule."""
         eid = str(uuid.uuid4())
         db.execute(
-            "INSERT INTO credit_card_emis (id, card_id, description, total_amount, monthly_amount, tenure, start_date) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (eid, card_id, description, total_amount, monthly_amount, tenure, start_date)
+            "INSERT INTO credit_card_emis (id, card_id, description, total_amount, monthly_amount, tenure, start_date, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (eid, card_id, description, total_amount, monthly_amount, tenure, start_date, 'active')
         )
         
         # Generate payments
