@@ -31,19 +31,21 @@ LOGO_B64 = get_base64_logo()
 
 # --- COOKIE MANAGEMENT ---
 cookie_manager = stx.CookieManager()
+cookies = cookie_manager.get_all()
 
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
 
 # --- PERSISTENT LOGIN CHECK ---
-if not st.session_state.user and cookie_manager:
-    # Note: cookie_manager.get can be slow on first load
-    token = cookie_manager.get('wealthflow_remember_token')
+if not st.session_state.user and cookies:
+    token = cookies.get('wealthflow_remember_token')
     if token:
         user_data = AuthService.validate_session(token)
         if user_data:
             st.session_state.user = user_data
+            # Force a rerun to clean up the UI if we just logged in via cookie
+            st.rerun()
 
 # AUTO-REPAIR: Database integrity fixes
 try:
