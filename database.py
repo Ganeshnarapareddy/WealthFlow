@@ -177,6 +177,10 @@ class TursoManager:
         except: pass
         try: self.execute("ALTER TABLE wf_users ADD COLUMN deleted_at TEXT")
         except: pass
+        try: self.execute("ALTER TABLE wf_users ADD COLUMN session_token TEXT")
+        except: pass
+        try: self.execute("ALTER TABLE wf_users ADD COLUMN session_expiry TEXT")
+        except: pass
 
         # 1. Add user_id column to ALL tables if missing
         all_app_tables = [

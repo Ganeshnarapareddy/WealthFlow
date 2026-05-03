@@ -2,3 +2,4 @@ streamlit
 libsql-client
 pandas
 plotly
+extra-streamlit-components

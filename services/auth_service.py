@@ -1,6 +1,6 @@
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from database import db
 
 class AuthService:
@@ -144,3 +144,39 @@ class AuthService:
         if res and res.rows:
             return res.rows
         return []
+
+    @staticmethod
+    def create_session(user_id):
+        """Generate a persistent session token for a user."""
+        token = str(uuid.uuid4())
+        expiry = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
+        db.execute("UPDATE wf_users SET session_token = ?, session_expiry = ? WHERE id = ?", (token, expiry, user_id))
+        return token
+
+    @staticmethod
+    def validate_session(token):
+        """Check if a session token is valid and not expired."""
+        if not token: return None
+        res = db.execute(
+            "SELECT id, username, role, email, currency, phone, short_id, status, session_expiry "
+            "FROM wf_users WHERE session_token = ? AND status = 'active'",
+            (token,)
+        )
+        if res and res.rows:
+            row = res.rows[0]
+            if not row[8]: return None
+            try:
+                expiry = datetime.strptime(row[8], "%Y-%m-%d %H:%M")
+                if expiry > datetime.now():
+                    return {
+                        "id": row[0], "username": row[1], "role": row[2], 
+                        "email": row[3], "currency": row[4], "phone": row[5],
+                        "short_id": row[6], "status": row[7]
+                    }
+            except: pass
+        return None
+
+    @staticmethod
+    def clear_session(user_id):
+        """Clear the session token for a user (on logout)."""
+        db.execute("UPDATE wf_users SET session_token = NULL, session_expiry = NULL WHERE id = ?", (user_id,))

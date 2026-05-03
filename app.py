@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import extra_streamlit_components as stx
 from datetime import datetime
 import base64
 import os
@@ -28,9 +29,25 @@ def get_base64_logo():
 
 LOGO_B64 = get_base64_logo()
 
+# --- COOKIE MANAGEMENT ---
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
+
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
+
+# --- PERSISTENT LOGIN CHECK ---
+if not st.session_state.user and cookie_manager:
+    # Note: cookie_manager.get can be slow on first load
+    token = cookie_manager.get('wealthflow_remember_token')
+    if token:
+        user_data = AuthService.validate_session(token)
+        if user_data:
+            st.session_state.user = user_data
 
 # AUTO-REPAIR: Database integrity fixes
 try:
@@ -94,10 +111,14 @@ def login_page():
         with tab_login:
             user_in = st.text_input("Username", key="l_user")
             pass_in = st.text_input("Password", type="password", key="l_pass")
+            l_remember = st.checkbox("Remember me for 30 days", value=True, key="l_remember")
             if st.button("Login", use_container_width=True, type="primary"):
                 user = AuthService.login(user_in.strip(), pass_in)
                 if user:
                     st.session_state.user = user
+                    if l_remember and cookie_manager:
+                        token = AuthService.create_session(user['id'])
+                        cookie_manager.set('wealthflow_remember_token', token, expires_at=datetime.now() + timedelta(days=30))
                     # Load saved currency preference
                     saved_sym = FinanceService.get_setting('currency_symbol', '₹', user['id'])
                     st.session_state['sym'] = saved_sym
@@ -113,6 +134,7 @@ def login_page():
             s_pass = st.text_input("Choose Password", type="password", key="s_pass")
             s_email = st.text_input("Email", key="s_email")
             s_phone = st.text_input("Phone Number", key="s_phone")
+            s_remember = st.checkbox("Remember me for 30 days", value=True, key="s_remember")
             st.info("💡 Providing Email or Phone ensures your data can be recovered if you delete your account.")
             if st.button("Create Account", use_container_width=True):
                 if not s_email and not s_phone:
@@ -122,7 +144,13 @@ def login_page():
                 else:
                     uid_res = AuthService.signup(s_user.strip(), s_pass, s_email, s_phone)
                     if isinstance(uid_res, str) and len(uid_res) > 30:
-                        st.success("Account created! Please switch to Login tab.")
+                        user = AuthService.login(s_user.strip(), s_pass)
+                        if user:
+                            st.session_state.user = user
+                            if s_remember and cookie_manager:
+                                token = AuthService.create_session(user['id'])
+                                cookie_manager.set('wealthflow_remember_token', token, expires_at=datetime.now() + timedelta(days=30))
+                            st.rerun()
                     else:
                         st.error(str(uid_res))
                         
@@ -306,6 +334,9 @@ if st.session_state['show_menu']:
         
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔓 Logout", key="ov_Logout", use_container_width=True, type="secondary"):
+            if cookie_manager:
+                cookie_manager.delete('wealthflow_remember_token')
+                AuthService.clear_session(st.session_state.user['id'])
             st.session_state.user = None
             st.rerun()
     
@@ -341,6 +372,9 @@ if page == "Dashboard":
                     st.error("Name already taken")
             st.markdown("---")
             if st.button("Logout", use_container_width=True, type="primary"):
+                if cookie_manager:
+                    cookie_manager.delete('wealthflow_remember_token')
+                    AuthService.clear_session(uid)
                 st.session_state['user'] = None
                 st.rerun()
 
