@@ -676,14 +676,31 @@ if page == "Dashboard":
             fig_dy.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 font_color="#e2e8f0",
-                margin=dict(t=10,b=10,l=0,r=0),
+                margin=dict(t=30,b=10,l=0,r=0), # Increased top margin for labels
                 width=dynamic_width,
                 height=450,
                 xaxis=dict(type='category', title=None, fixedrange=True, tickangle=0),
                 yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
-                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+                legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
                 bargap=0.6  # Make bars smaller by increasing gap
             )
+            
+            # Add totals on top of bars
+            totals = df_dy.groupby('Date')['Amount'].sum().reset_index()
+            fig_dy.add_trace(go.Scatter(
+                x=totals['Date'],
+                y=totals['Amount'],
+                mode='text',
+                text=totals['Amount'].apply(lambda x: f"{x:,.0f}"),
+                textposition='top center',
+                showlegend=False,
+                hoverinfo='skip',
+                textfont=dict(color='#94a3b8', size=11)
+            ))
+            
+            # Ensure Y-axis has room for labels
+            max_y = totals['Amount'].max() if not totals.empty else 100
+            fig_dy.update_yaxes(range=[0, max_y * 1.15])
             
             # Wrap in a scrollable container
             st.markdown(f'<div style="overflow-x: auto; width: 100%; padding-bottom: 20px;">', unsafe_allow_html=True)
