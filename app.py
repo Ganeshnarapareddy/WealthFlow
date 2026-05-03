@@ -30,7 +30,7 @@ def get_base64_logo():
 LOGO_B64 = get_base64_logo()
 
 # --- COOKIE MANAGEMENT ---
-cookie_manager = stx.CookieManager()
+cookie_manager = stx.CookieManager(key="wf_cookie_mgr")
 
 # Session State Initialization
 if "user" not in st.session_state:
@@ -38,13 +38,13 @@ if "user" not in st.session_state:
 # --- PERSISTENT LOGIN CHECK ---
 if not st.session_state.user:
     cookies = cookie_manager.get_all()
-    if cookies:
-        token = cookies.get('wealthflow_remember_token')
-        if token:
-            user_data = AuthService.validate_session(token)
-            if user_data:
-                st.session_state.user = user_data
-                st.rerun()
+    # Ensure cookies is a dictionary and contains our token
+    if isinstance(cookies, dict) and 'wealthflow_remember_token' in cookies:
+        token = cookies['wealthflow_remember_token']
+        user_data = AuthService.validate_session(token)
+        if user_data:
+            st.session_state.user = user_data
+            st.rerun()
 
 # AUTO-REPAIR: Database integrity fixes
 try:
