@@ -147,10 +147,14 @@ class AuthService:
 
     @staticmethod
     def create_session(user_id):
-        """Generate a persistent session token for a user."""
+        """Generate a persistent session token for a user (Supports Multi-device)."""
         token = str(uuid.uuid4())
         expiry = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
-        db.execute("UPDATE wf_users SET session_token = ?, session_expiry = ? WHERE id = ?", (token, expiry, user_id))
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        db.execute(
+            "INSERT INTO user_sessions (id, user_id, token, expiry, created_at) VALUES (?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), user_id, token, expiry, now)
+        )
         return token
 
     @staticmethod
@@ -158,13 +162,13 @@ class AuthService:
         """Check if a session token is valid and not expired."""
         if not token: return None
         res = db.execute(
-            "SELECT id, username, role, email, currency, phone, short_id, status, session_expiry "
-            "FROM wf_users WHERE session_token = ? AND status = 'active'",
+            "SELECT u.id, u.username, u.role, u.email, u.currency, u.phone, u.short_id, u.status, s.expiry "
+            "FROM wf_users u JOIN user_sessions s ON u.id = s.user_id "
+            "WHERE s.token = ? AND u.status = 'active'",
             (token,)
         )
         if res and res.rows:
             row = res.rows[0]
-            if not row[8]: return None
             try:
                 expiry = datetime.strptime(row[8], "%Y-%m-%d %H:%M")
                 if expiry > datetime.now():
@@ -173,10 +177,14 @@ class AuthService:
                         "email": row[3], "currency": row[4], "phone": row[5],
                         "short_id": row[6], "status": row[7]
                     }
+                else:
+                    # Cleanup expired session
+                    db.execute("DELETE FROM user_sessions WHERE token = ?", (token,))
             except: pass
         return None
 
     @staticmethod
-    def clear_session(user_id):
-        """Clear the session token for a user (on logout)."""
-        db.execute("UPDATE wf_users SET session_token = NULL, session_expiry = NULL WHERE id = ?", (user_id,))
+    def clear_session(token):
+        """Clear a specific session token (on logout)."""
+        if not token: return
+        db.execute("DELETE FROM user_sessions WHERE token = ?", (token,))

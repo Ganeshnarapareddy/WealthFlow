@@ -338,10 +338,11 @@ if st.session_state['show_menu']:
         
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔓 Logout", key="ov_Logout", use_container_width=True, type="secondary"):
-            if 'wealthflow_remember_token' in cookies:
+            token = cookies.get('wealthflow_remember_token')
+            AuthService.clear_session(token)
+            if token:
                 del cookies['wealthflow_remember_token']
                 cookies.save()
-            AuthService.clear_session(st.session_state.user['id'])
             st.session_state.user = None
             st.rerun()
     
@@ -377,10 +378,11 @@ if page == "Dashboard":
                     st.error("Name already taken")
             st.markdown("---")
             if st.button("Logout", use_container_width=True, type="primary"):
-                if 'wealthflow_remember_token' in cookies:
+                token = cookies.get('wealthflow_remember_token')
+                AuthService.clear_session(token)
+                if token:
                     del cookies['wealthflow_remember_token']
                     cookies.save()
-                AuthService.clear_session(uid)
                 st.session_state['user'] = None
                 st.rerun()
 

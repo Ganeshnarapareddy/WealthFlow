@@ -111,7 +111,10 @@ class TursoManager:
             """CREATE TABLE IF NOT EXISTS actioned_alerts (
                 id TEXT PRIMARY KEY, user_id TEXT, alert_id TEXT,
                 month_year TEXT, actioned_at TEXT,
-                UNIQUE(user_id, alert_id, month_year))"""
+                UNIQUE(user_id, alert_id, month_year)),
+            """CREATE TABLE IF NOT EXISTS user_sessions (
+                id TEXT PRIMARY KEY, user_id TEXT, token TEXT UNIQUE,
+                expiry TEXT, created_at TEXT)"""
         ]
         
         for q in ddl:
