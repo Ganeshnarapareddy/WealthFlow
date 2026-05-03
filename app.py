@@ -2,11 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-try:
-    import extra_streamlit_components as stx
-    HAS_STX = True
-except ImportError:
-    HAS_STX = False
+import extra_streamlit_components as stx
 from datetime import datetime, timedelta
 import base64
 import os
@@ -34,26 +30,29 @@ def get_base64_logo():
 LOGO_B64 = get_base64_logo()
 
 # --- COOKIE MANAGEMENT ---
-if HAS_STX:
-    cookie_manager = stx.CookieManager()
-    cookies = cookie_manager.get_all()
-else:
-    cookie_manager = None
-    cookies = {}
+cookie_manager = stx.CookieManager()
 
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
+if "cookie_ready" not in st.session_state:
+    st.session_state.cookie_ready = False
 
 # --- PERSISTENT LOGIN CHECK ---
-if not st.session_state.user and cookies:
-    token = cookies.get('wealthflow_remember_token')
-    if token:
-        user_data = AuthService.validate_session(token)
-        if user_data:
-            st.session_state.user = user_data
-            # Force a rerun to clean up the UI if we just logged in via cookie
-            st.rerun()
+if not st.session_state.user and not st.session_state.cookie_ready:
+    cookies = cookie_manager.get_all()
+    if cookies is not None: # get_all returns None while loading
+        token = cookies.get('wealthflow_remember_token')
+        if token:
+            user_data = AuthService.validate_session(token)
+            if user_data:
+                st.session_state.user = user_data
+        st.session_state.cookie_ready = True
+        st.rerun()
+    else:
+        # Wait for component to load
+        st.markdown("<div style='text-align:center; margin-top:20vh; color:#94a3b8;'>Authenticating...</div>", unsafe_allow_html=True)
+        st.stop()
 
 # AUTO-REPAIR: Database integrity fixes
 try:
