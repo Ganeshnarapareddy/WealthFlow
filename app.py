@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import extra_streamlit_components as stx
-from datetime import datetime
+from datetime import datetime, timedelta
 import base64
 import os
 
@@ -30,11 +30,7 @@ def get_base64_logo():
 LOGO_B64 = get_base64_logo()
 
 # --- COOKIE MANAGEMENT ---
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+cookie_manager = stx.CookieManager()
 
 # Session State Initialization
 if "user" not in st.session_state:
