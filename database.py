@@ -44,6 +44,14 @@ class TursoManager:
             logger.error(f"Database Error: {e} on query: {query}")
             raise e
 
+    def table_exists(self, table_name):
+        """Check if a table exists in the database."""
+        try:
+            res = self.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+            return res and res.rows and len(res.rows) > 0
+        except:
+            return False
+
     def initialize_schema(self):
         logger.info("Initializing Pro Schema...")
 
@@ -134,6 +142,19 @@ class TursoManager:
         try: self.execute("ALTER TABLE loans ADD COLUMN emi_start_date TEXT")
         except: pass
             
+        # Robust check and creation for user_sessions (Multi-device support)
+        if not self.table_exists("user_sessions"):
+            logger.info("Force creating missing table: user_sessions")
+            try:
+                self.execute("""CREATE TABLE user_sessions (
+                    id TEXT PRIMARY KEY, user_id TEXT, token TEXT UNIQUE,
+                    expiry TEXT, created_at TEXT)""")
+                logger.info("user_sessions table created successfully.")
+            except Exception as e:
+                logger.error(f"Failed to create user_sessions: {e}")
+        else:
+            logger.info("user_sessions table already exists.")
+
         # Seed Categories only if table is empty
         res = self.execute("SELECT COUNT(*) FROM categories")
         if res and res.rows and res.rows[0][0] == 0:
