@@ -566,6 +566,7 @@ if page == "Dashboard":
             })
         
     # 4. CC Bills
+    card_alerts = CreditCardService.get_upcoming_bills(uid, 30)
     for b in card_alerts:
         all_alerts.append({
             'category': 'Bill', 'days': b['days_left'],
