@@ -629,7 +629,7 @@ if page == "Dashboard":
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Dashboard Tabs
-    t_sp, t_ie, t_tr, t_we, t_bu = st.tabs(["📊 Spending", "📊 Income/Expense", "📈 Trend", "💰 Wealth", "🔥 Burn"])
+    t_sp, t_dy, t_ie, t_tr, t_we, t_bu = st.tabs(["📊 Category", "📅 Daily", "📊 Income/Expense", "📈 Trend", "💰 Wealth", "🔥 Burn"])
     with t_sp:
         df_sp = FinanceService.get_spending_by_category(uid, sel_year, sel_month)
         if not df_sp.empty:
@@ -650,6 +650,40 @@ if page == "Dashboard":
             st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
         else: empty_state("No Data", "No spending data available.")
+
+    with t_dy:
+        df_dy = FinanceService.get_daily_spending_by_category(uid, sel_year, sel_month)
+        if not df_dy.empty:
+            # Format dates as strings for cleaner categorical display
+            df_dy['Date'] = pd.to_datetime(df_dy['Date']).dt.strftime('%Y-%m-%d')
+            df_dy = df_dy.sort_values('Date')
+            
+            unique_days = df_dy['Date'].nunique()
+            # Calculate dynamic width: minimum 800px, or 100px per day
+            dynamic_width = max(unique_days * 100, 800)
+            
+            fig_dy = px.bar(df_dy, x='Date', y='Amount', color='Category', 
+                            title=None,
+                            labels={'Amount': f'Amount ({st.session_state["sym"]})'},
+                            barmode='stack')
+            
+            fig_dy.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font_color="#e2e8f0",
+                margin=dict(t=10,b=10,l=0,r=0),
+                width=dynamic_width,
+                height=450,
+                xaxis=dict(type='category', title=None, fixedrange=True, tickangle=0),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
+                legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+                bargap=0.6  # Make bars smaller by increasing gap
+            )
+            
+            # Wrap in a scrollable container
+            st.markdown(f'<div style="overflow-x: auto; width: 100%; padding-bottom: 20px;">', unsafe_allow_html=True)
+            st.plotly_chart(fig_dy, use_container_width=False, config={'displayModeBar': False})
+            st.markdown('</div>', unsafe_allow_html=True)
+        else: empty_state("No Data", "No daily spending data available.")
 
     with t_ie:
         df_ie = FinanceService.get_income_expense_by_month(uid, sel_year, sel_month)

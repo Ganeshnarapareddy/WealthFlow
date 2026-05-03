@@ -231,6 +231,49 @@ class FinanceService:
         return pd.DataFrame(columns=["Category", "Amount"])
 
     @staticmethod
+    def get_daily_spending_by_category(user_id, year=None, month=None):
+        query = """
+            SELECT Date, Category, SUM(Amount) as Amount FROM (
+                SELECT SUBSTR(date, 1, 10) as Date, 
+                       (SELECT name FROM categories WHERE id = t.category_id) as Category, 
+                       amount as Amount, user_id, type
+                FROM transactions t
+                UNION ALL
+                SELECT SUBSTR(date, 1, 10) as Date, 
+                       'Credit Card' as Category, 
+                       amount as Amount, user_id, txn_type as type
+                FROM credit_card_transactions
+            )
+            WHERE user_id = ? AND UPPER(type) = 'EXPENSE'
+        """
+        params = [user_id]
+        if year and year != "All" and month and month != "All":
+            query += " AND SUBSTR(Date, 1, 10) >= ? AND SUBSTR(Date, 1, 10) <= ?"
+            start_day = int(FinanceService.get_setting('fiscal_month_start_day', '1', user_id))
+            start_date = date(int(year), month, start_day).strftime("%Y-%m-%d")
+            if month == 12:
+                end_date = (date(int(year) + 1, 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
+            else:
+                end_date = (date(int(year), month + 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
+            params.extend([start_date, end_date])
+        elif year and year != "All":
+            query += " AND Date LIKE ?"
+            params.append(f"{year}%")
+            
+        query += " GROUP BY Date, Category ORDER BY Date ASC"
+        res = db.execute(query, tuple(params))
+        
+        rows = []
+        if res and res.rows:
+            for r in res.rows:
+                cat_name = r[1] if r[1] else "Other"
+                rows.append([r[0], cat_name, r[2]])
+                
+        if rows:
+            return pd.DataFrame(rows, columns=["Date", "Category", "Amount"])
+        return pd.DataFrame(columns=["Date", "Category", "Amount"])
+
+    @staticmethod
     def get_available_years(user_id):
         res = db.execute("SELECT DISTINCT SUBSTR(date, 1, 4) as yr FROM (SELECT date, user_id FROM transactions UNION ALL SELECT date, user_id FROM credit_card_transactions) WHERE user_id = ? ORDER BY yr DESC", (user_id,))
         if res and res.rows: return [int(r[0]) for r in res.rows if r[0]]
