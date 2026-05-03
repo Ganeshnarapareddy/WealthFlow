@@ -310,6 +310,7 @@ def fmt(val):
 page = st.session_state['page']
 
 if page == "Dashboard":
+    # v1.1 - Dashboard with Daily Analytics
     # Top Profile Bar
     t1, t2 = st.columns([0.85, 0.15])
     with t2:

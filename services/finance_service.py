@@ -6,6 +6,7 @@ from database import db
 
 
 class FinanceService:
+    # v1.1 - Added daily spending analytics
     """Core financial operations — transactions, categories, analytics."""
 
     @staticmethod
