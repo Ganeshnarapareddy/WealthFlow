@@ -47,38 +47,33 @@ st.set_page_config(
 )
 
 # --- GLOBAL STYLES ---
-st.markdown("""
-    <style>
+st.markdown("""<style>
     [data-testid="stSidebar"], [data-testid="stSidebarNav"], button[kind="header"] {
         display: none !important;
     }
     .main .block-container {
-        padding-top: 3rem !important;
+        padding-top: 0 !important;
     }
-    </style>
-""", unsafe_allow_html=True)
+</style>""", unsafe_allow_html=True)
 
 # --- AUTHENTICATION ---
 def login_page():
-    st.markdown("""
-        <style>
+    st.markdown("""<style>
         .auth-container {
             max-width: 400px;
-            margin: 100px auto;
-            padding: 2.5rem;
+            margin: 2vh auto;
+            padding: 2rem;
             background: rgba(15, 23, 42, 0.95);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 24px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
-        .auth-logo { font-size: 2.5rem; text-align: center; margin-bottom: 1.5rem; }
-        </style>
-    """, unsafe_allow_html=True)
+        .auth-logo { font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem; }
+    </style>""", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown('<div class="auth-container">', unsafe_allow_html=True)
-        st.markdown('<div class="auth-logo">💎 WealthFlow</div>', unsafe_allow_html=True)
+        st.markdown('<div class="auth-container"><div class="auth-logo">💎 WealthFlow</div>', unsafe_allow_html=True)
         
         tab_login, tab_signup, tab_forgot = st.tabs(["Login", "Signup", "Reset"])
         
