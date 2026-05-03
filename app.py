@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import extra_streamlit_components as stx
+from st_cookies_manager import CookieManager
 from datetime import datetime, timedelta
 import base64
 import os
@@ -30,17 +30,18 @@ def get_base64_logo():
 LOGO_B64 = get_base64_logo()
 
 # --- COOKIE MANAGEMENT ---
-cookie_manager = stx.CookieManager(key="wf_cookie_mgr")
+cookies = CookieManager()
+if not cookies.ready():
+    st.stop()
 
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
+
 # --- PERSISTENT LOGIN CHECK ---
 if not st.session_state.user:
-    cookies = cookie_manager.get_all()
-    # Ensure cookies is a dictionary and contains our token
-    if isinstance(cookies, dict) and 'wealthflow_remember_token' in cookies:
-        token = cookies['wealthflow_remember_token']
+    token = cookies.get('wealthflow_remember_token')
+    if token:
         user_data = AuthService.validate_session(token)
         if user_data:
             st.session_state.user = user_data
@@ -113,9 +114,10 @@ def login_page():
                 user = AuthService.login(user_in.strip(), pass_in)
                 if user:
                     st.session_state.user = user
-                    if l_remember and cookie_manager:
+                    if l_remember:
                         token = AuthService.create_session(user['id'])
-                        cookie_manager.set('wealthflow_remember_token', token, expires_at=datetime.now() + timedelta(days=30))
+                        cookies['wealthflow_remember_token'] = token
+                        cookies.save()
                     # Load saved currency preference
                     saved_sym = FinanceService.get_setting('currency_symbol', '₹', user['id'])
                     st.session_state['sym'] = saved_sym
@@ -144,9 +146,10 @@ def login_page():
                         user = AuthService.login(s_user.strip(), s_pass)
                         if user:
                             st.session_state.user = user
-                            if s_remember and cookie_manager:
+                            if s_remember:
                                 token = AuthService.create_session(user['id'])
-                                cookie_manager.set('wealthflow_remember_token', token, expires_at=datetime.now() + timedelta(days=30))
+                                cookies['wealthflow_remember_token'] = token
+                                cookies.save()
                             st.rerun()
                     else:
                         st.error(str(uid_res))
@@ -331,9 +334,10 @@ if st.session_state['show_menu']:
         
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔓 Logout", key="ov_Logout", use_container_width=True, type="secondary"):
-            if cookie_manager:
-                cookie_manager.delete('wealthflow_remember_token')
-                AuthService.clear_session(st.session_state.user['id'])
+            if 'wealthflow_remember_token' in cookies:
+                del cookies['wealthflow_remember_token']
+                cookies.save()
+            AuthService.clear_session(st.session_state.user['id'])
             st.session_state.user = None
             st.rerun()
     
@@ -369,9 +373,10 @@ if page == "Dashboard":
                     st.error("Name already taken")
             st.markdown("---")
             if st.button("Logout", use_container_width=True, type="primary"):
-                if cookie_manager:
-                    cookie_manager.delete('wealthflow_remember_token')
-                    AuthService.clear_session(uid)
+                if 'wealthflow_remember_token' in cookies:
+                    del cookies['wealthflow_remember_token']
+                    cookies.save()
+                AuthService.clear_session(uid)
                 st.session_state['user'] = None
                 st.rerun()
 
