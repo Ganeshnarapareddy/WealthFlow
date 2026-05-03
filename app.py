@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from st_cookies_manager import CookieManager
+import streamlit_cookies_manager as scm
 from datetime import datetime, timedelta
 import base64
 import os
@@ -30,7 +30,11 @@ def get_base64_logo():
 LOGO_B64 = get_base64_logo()
 
 # --- COOKIE MANAGEMENT ---
-cookies = CookieManager()
+# Using the more persistent EncryptedCookieManager
+cookies = scm.EncryptedCookieManager(
+    password=st.secrets.get("COOKIE_PASSWORD", "wealthflow_pro_2026_secure"),
+    path="/"
+)
 if not cookies.ready():
     st.stop()
 

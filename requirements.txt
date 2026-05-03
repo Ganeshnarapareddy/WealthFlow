@@ -2,4 +2,4 @@ streamlit
 libsql-client
 pandas
 plotly
-st-cookies-manager
+streamlit-cookies-manager
