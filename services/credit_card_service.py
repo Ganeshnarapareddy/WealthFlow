@@ -6,6 +6,7 @@ from database import db
 
 
 class CreditCardService:
+    # v1.1 - Added due_date to upcoming bills
     """Manage credit cards and their transactions."""
 
     @staticmethod
