@@ -507,32 +507,21 @@ if page == "Dashboard":
 
     # --- Credit Card Summary ---
     st.markdown("---")
-    cc_col1, cc_col2 = st.columns([2, 1])
     df_cards = CreditCardService.get_cards(uid)
-    with cc_col1:
-        st.markdown("#### 💳 Credit Card Statistics")
-        if not df_cards.empty:
-            total_limit = df_cards['card_limit'].sum()
-            total_outstanding = df_cards['current_balance'].sum()
-            total_available = total_limit + total_outstanding
-            utilization = (-total_outstanding / total_limit * 100) if total_limit > 0 else 0
-            
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Limit", fmt(total_limit))
-            c2.metric("Outstanding", fmt(total_outstanding), delta=f"{utilization:.1f}% Use", delta_color="inverse")
-            c3.metric("Available", fmt(total_available))
-            st.progress(max(0.0, min(1.0, utilization/100)))
-        else:
-            st.info("No credit cards tracked yet.")
-            
-    with cc_col2:
-        st.markdown("#### 🔔 Bill Alerts")
-        card_alerts = CreditCardService.get_upcoming_bills(uid, 15)
-        if card_alerts:
-            for bill in card_alerts[:2]:
-                st.warning(f"**{bill['name']}** in {bill['days_left']}d")
-        else:
-            st.success("All bills clear!")
+    st.markdown("#### 💳 Credit Card Statistics")
+    if not df_cards.empty:
+        total_limit = df_cards['card_limit'].sum()
+        total_outstanding = df_cards['current_balance'].sum()
+        total_available = total_limit + total_outstanding
+        utilization = (-total_outstanding / total_limit * 100) if total_limit > 0 else 0
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Limit", fmt(total_limit))
+        c2.metric("Outstanding", fmt(total_outstanding), delta=f"{utilization:.1f}% Use", delta_color="inverse")
+        c3.metric("Available", fmt(total_available))
+        st.progress(max(0.0, min(1.0, utilization/100)))
+    else:
+        st.info("No credit cards tracked yet.")
 
     # Smart Alerts Section
     st.markdown("### 🔔 Smart Alerts")
@@ -879,16 +868,18 @@ elif page == "Subscriptions":
         st.success("Subscription added!")
         st.session_state['sub_added'] = False
     with st.expander("➕ Add Subscription"):
-        with st.form("new_sub"):
-            name = st.text_input("Service Name")
-            cost = st.number_input("Amount", min_value=0.01, value=None, placeholder="Enter amount")
-            icon = st.text_input("Emoji Icon", value="💳")
-            cycle = st.selectbox("Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly", "Custom"])
-            custom_months = None
-            if cycle == "Custom":
-                custom_months = st.number_input("Custom Months", min_value=1, value=3, step=1)
-            start = st.date_input("Start Date")
-            if st.form_submit_button("Track Bill"):
+        name = st.text_input("Service Name")
+        cost = st.number_input("Amount", min_value=0.01, value=None, placeholder="Enter amount")
+        icon = st.text_input("Emoji Icon", value="💳")
+        cycle = st.selectbox("Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly", "Custom"])
+        custom_months = None
+        if cycle == "Custom":
+            custom_months = st.number_input("Custom Months", min_value=1, value=3, step=1)
+        start = st.date_input("Start Date")
+        if st.button("Track Bill", type="primary", use_container_width=True):
+            if not name or cost is None:
+                st.error("Please provide name and amount.")
+            else:
                 final_cycle = f"Custom:{custom_months}" if cycle == "Custom" else cycle
                 RecurringService.add_subscription(uid, name, cost, final_cycle, start, icon)
                 st.session_state['sub_added'] = True
