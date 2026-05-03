@@ -2,7 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import extra_streamlit_components as stx
+try:
+    import extra_streamlit_components as stx
+    HAS_STX = True
+except ImportError:
+    HAS_STX = False
 from datetime import datetime, timedelta
 import base64
 import os
@@ -30,8 +34,12 @@ def get_base64_logo():
 LOGO_B64 = get_base64_logo()
 
 # --- COOKIE MANAGEMENT ---
-cookie_manager = stx.CookieManager()
-cookies = cookie_manager.get_all()
+if HAS_STX:
+    cookie_manager = stx.CookieManager()
+    cookies = cookie_manager.get_all()
+else:
+    cookie_manager = None
+    cookies = {}
 
 # Session State Initialization
 if "user" not in st.session_state:
