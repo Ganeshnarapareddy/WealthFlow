@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import base64
+import os
 
 # Import Services
 from database import db
@@ -14,6 +16,17 @@ from services.asset_service import AssetService
 from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
 from services.auth_service import AuthService
+
+# --- LOGO HELPER ---
+def get_base64_logo():
+    logo_path = os.path.join("assets", "logo.png")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+            return f"data:image/png;base64,{data}"
+    return None
+
+LOGO_B64 = get_base64_logo()
 
 # Session State Initialization
 if "user" not in st.session_state:
@@ -41,7 +54,7 @@ ASSET_TYPES = ["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "O
 # --- CONFIG ---
 st.set_page_config(
     page_title="WealthFlow Pro",
-    page_icon="💎",
+    page_icon="assets/logo.png" if os.path.exists("assets/logo.png") else "💎",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -73,7 +86,8 @@ def login_page():
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown('<div class="auth-container"><div class="auth-logo">💎 WealthFlow</div>', unsafe_allow_html=True)
+        logo_html = f'<img src="{LOGO_B64}" style="width: 80px; margin-bottom: 10px; mix-blend-mode: screen; border-radius: 12px;">' if LOGO_B64 else "💎"
+        st.markdown(f'<div class="auth-container"><div class="auth-logo">{logo_html}<br>WealthFlow</div>', unsafe_allow_html=True)
         
         tab_login, tab_signup, tab_forgot = st.tabs(["Login", "Signup", "Reset"])
         
@@ -259,7 +273,9 @@ if st.session_state['show_menu']:
             st.rerun()
             
     # Centered Logo and Credit
-    st.markdown("<h1 style='text-align:center; color:white; font-size:2.8rem; margin-top:20px;'>💎 WealthFlow</h1>", unsafe_allow_html=True)
+    logo_top = f'<img src="{LOGO_B64}" style="width: 100px; display: block; margin: 0 auto; mix-blend-mode: screen; border-radius: 20px;">' if LOGO_B64 else "💎"
+    st.markdown(f"<div style='text-align:center; margin-top:20px;'>{logo_top}</div>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; color:white; font-size:2.8rem; margin-top:0px;'>WealthFlow</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center; color:#94a3b8; font-size:0.9rem; margin-top:-10px; font-style:italic;'>Made by Ganesh Narapareddy</p>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
