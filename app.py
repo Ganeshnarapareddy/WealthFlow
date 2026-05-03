@@ -35,24 +35,16 @@ cookie_manager = stx.CookieManager()
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
-if "cookie_ready" not in st.session_state:
-    st.session_state.cookie_ready = False
-
 # --- PERSISTENT LOGIN CHECK ---
-if not st.session_state.user and not st.session_state.cookie_ready:
+if not st.session_state.user:
     cookies = cookie_manager.get_all()
-    if cookies is not None: # get_all returns None while loading
+    if cookies:
         token = cookies.get('wealthflow_remember_token')
         if token:
             user_data = AuthService.validate_session(token)
             if user_data:
                 st.session_state.user = user_data
-        st.session_state.cookie_ready = True
-        st.rerun()
-    else:
-        # Wait for component to load
-        st.markdown("<div style='text-align:center; margin-top:20vh; color:#94a3b8;'>Authenticating...</div>", unsafe_allow_html=True)
-        st.stop()
+                st.rerun()
 
 # AUTO-REPAIR: Database integrity fixes
 try:
