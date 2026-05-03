@@ -559,10 +559,14 @@ if page == "Dashboard":
         due_dt = datetime.strptime(e['Due Date'], "%Y-%m-%d").date()
         days = (due_dt - datetime.now().date()).days
         auto_desc = f"Auto: {e['Description']}"
-        if not FinanceService.auto_txn_exists(auto_desc, uid):
+        status = e.get('Status', 'pending')
+        
+        # Only show if not already an auto transaction, OR if it's already marked as paid (for visibility)
+        if status == 'paid' or not FinanceService.auto_txn_exists(auto_desc, uid):
             all_alerts.append({
                 'category': 'EMI', 'days': days, 'date': due_dt.strftime("%d %b"),
-                'name': f"{e['Description']} ({e['Card']})", 'amount': e['Amount'], 'id': e['id'], 'icon': "🗓️"
+                'name': f"{e['Description']} ({e['Card']})", 'amount': e['Amount'], 
+                'id': e['id'], 'icon': "🗓️", 'status': status
             })
         
     # 4. CC Bills
@@ -570,7 +574,7 @@ if page == "Dashboard":
     for b in card_alerts:
         all_alerts.append({
             'category': 'Bill', 'days': b['days_left'],
-            'date': datetime.now().date().strftime("%d %b"),
+            'date': b['due_date'].strftime("%d %b"),
             'name': f"{b['name']} Bill", 'amount': b['balance'], 'id': b['id'], 'icon': "💳"
         })
 
@@ -589,10 +593,13 @@ if page == "Dashboard":
                 # Use a single column for better visibility of buttons on mobile/small screens
                 msg = f"{a['icon']} **{a['name']}** "
                 dt = f"`{a['date']}`"
+                status = a.get('status', 'pending')
                 
                 c1, c2 = st.columns([0.75, 0.25])
                 with c1:
-                    if days <= 2:
+                    if status == 'paid':
+                        st.write(f"✅ ~~{msg} — **PAID** {dt} ({amt_fmt})~~")
+                    elif days <= 2:
                         st.error(f"🔴 {msg} — **DUE SOON** {dt}! ({amt_fmt})")
                     elif days <= 5:
                         st.warning(f"🟠 {msg} — in **{days} days** {dt} ({amt_fmt})")
@@ -615,9 +622,12 @@ if page == "Dashboard":
                             )
                             st.rerun()
                     elif cat == 'EMI':
-                        if st.button("Paid", key=f"btn_cc_emi_{a['id']}", use_container_width=True):
-                            CreditCardService.mark_emi_paid(a['id'])
-                            st.rerun()
+                        if status == 'pending':
+                            if st.button("Paid", key=f"btn_cc_emi_{a['id']}", use_container_width=True):
+                                CreditCardService.mark_emi_paid(a['id'])
+                                st.rerun()
+                        else:
+                            st.write("Done")
                     elif cat == 'Loan':
                         btn_label = "Received" if "Given" in a['name'] else "Paid"
                         if st.button(btn_label, key=f"btn_loan_{a['id']}", use_container_width=True):
@@ -625,6 +635,10 @@ if page == "Dashboard":
                                 LoanService.toggle_payment_status(a['id'], "pending")
                             else:
                                 LoanService.update_loan_status(a['id'], 'paid')
+                            st.rerun()
+                    elif cat == 'Bill':
+                        if st.button("Paid", key=f"btn_cc_bill_{a['id']}", use_container_width=True):
+                            CreditCardService.add_transaction(uid, a['id'], a['amount'], f"Bill Payment: {a['name']}", "payment", sync_bank=True)
                             st.rerun()
             st.divider()
 

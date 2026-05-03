@@ -124,11 +124,15 @@ class CreditCardService:
         return float(res.rows[0][0]) if res and res.rows else 0.0
 
     @staticmethod
-    def get_upcoming_bills(user_id, days=15):
+    def get_upcoming_bills(user_id, days=30):
         today = datetime.now().date()
         cards = CreditCardService.get_cards(user_id)
         upcoming = []
         for _, row in cards.iterrows():
+            # In our system, current_balance is negative for expenses (debt)
+            balance = -row['current_balance'] if row['current_balance'] else 0
+            if balance <= 0: continue
+            
             bd = int(row['closing_date'] or 1)
             now = datetime.now()
             try:
@@ -140,8 +144,8 @@ class CreditCardService:
                 if 0 <= days_left <= days:
                     upcoming.append({
                         "id": row['id'], "name": row['name'], "bank": row['bank'],
-                        "closing_date": bd, "days_left": days_left,
-                        "balance": row['current_balance'], "limit": row['card_limit']
+                        "closing_date": bd, "due_date": next_bill, "days_left": days_left,
+                        "balance": balance, "limit": row['card_limit']
                     })
             except: continue
         return sorted(upcoming, key=lambda x: x['days_left'])
@@ -185,17 +189,35 @@ class CreditCardService:
 
     @staticmethod
     def get_upcoming_emi_payments(user_id, days_ahead=30):
+        # Get pending payments in next X days
         res = db.execute("""
-            SELECT p.id, e.description, p.amount, p.due_date, c.name as card_name
+            SELECT p.id, e.description, p.amount, p.due_date, c.name as card_name, p.status
             FROM credit_card_emi_payments p
             JOIN credit_card_emis e ON p.emi_id = e.id
             JOIN credit_cards c ON e.card_id = c.id
             WHERE e.user_id = ? AND p.status = 'pending' AND p.due_date <= date('now', '+' || ? || ' days')
             ORDER BY p.due_date ASC
         """, (user_id, days_ahead))
+        
+        pending = []
         if res and res.rows:
-            return pd.DataFrame(res.rows, columns=["id", "Description", "Amount", "Due Date", "Card"])
-        return pd.DataFrame(columns=["id", "Description", "Amount", "Due Date", "Card"])
+            pending = [dict(zip(["id", "Description", "Amount", "Due Date", "Card", "Status"], row)) for row in res.rows]
+            
+        # Get payments paid in the last 7 days to avoid "missing" confusion
+        res_paid = db.execute("""
+            SELECT p.id, e.description, p.amount, p.due_date, c.name as card_name, p.status
+            FROM credit_card_emi_payments p
+            JOIN credit_card_emis e ON p.emi_id = e.id
+            JOIN credit_cards c ON e.card_id = c.id
+            WHERE e.user_id = ? AND p.status = 'paid' AND p.paid_date >= date('now', '-7 days')
+            ORDER BY p.paid_date DESC
+        """, (user_id,))
+        
+        paid = []
+        if res_paid and res_paid.rows:
+            paid = [dict(zip(["id", "Description", "Amount", "Due Date", "Card", "Status"], row)) for row in res_paid.rows]
+            
+        return pd.DataFrame(pending + paid)
 
     @staticmethod
     def delete_emi(emi_id):
