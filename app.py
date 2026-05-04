@@ -85,10 +85,14 @@ ASSET_TYPES = ["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "O
 # --- CONFIG ---
 st.set_page_config(
     page_title="WealthFlow Pro",
-    page_icon="assets/logo.png" if os.path.exists("assets/logo.png") else "💎",
+    page_icon=LOGO_B64 if LOGO_B64 else "💎",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# --- APPLE HOME SCREEN ICON ---
+if LOGO_B64:
+    st.markdown(f'<link rel="apple-touch-icon" href="{LOGO_B64}">', unsafe_allow_html=True)
 
 # --- GLOBAL STYLES ---
 st.markdown("""<style>
