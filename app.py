@@ -109,19 +109,36 @@ def login_page():
     st.markdown("""<style>
         .auth-container {
             max-width: 400px;
-            margin: 2vh auto;
-            padding: 2rem;
+            margin: 5vh auto;
+            padding: 2.5rem;
             background: rgba(15, 23, 42, 0.95);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 24px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
         .auth-logo { font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem; }
+        .auth-logo img { width: 80px; margin-bottom: 10px; mix-blend-mode: screen; border-radius: 12px; }
+        
+        @media (max-width: 768px) {
+            .auth-container {
+                margin-top: 1vh !important;
+                padding: 1.5rem !important;
+                max-width: 95%;
+            }
+            .auth-logo { 
+                font-size: 1.8rem !important; 
+                margin-bottom: 0.2rem !important;
+            }
+            .auth-logo img {
+                width: 50px !important;
+                margin-bottom: 5px !important;
+            }
+        }
     </style>""", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        logo_html = f'<img src="{LOGO_B64}" style="width: 80px; margin-bottom: 10px; mix-blend-mode: screen; border-radius: 12px;">' if LOGO_B64 else "💎"
+        logo_html = f'<img src="{LOGO_B64}">' if LOGO_B64 else "💎"
         st.markdown(f'<div class="auth-container"><div class="auth-logo">{logo_html}<br>WealthFlow</div>', unsafe_allow_html=True)
         
         tab_login, tab_signup, tab_forgot = st.tabs(["Login", "Signup", "Reset"])
