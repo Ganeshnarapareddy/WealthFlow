@@ -83,56 +83,111 @@ def apply_styles():
             width: 100% !important;
         }
         
-        /* Secondary / Navigation Buttons in Sidebar */
+        /* Sidebar Styling */
+        [data-testid="stSidebar"] {
+            background-color: #0f172a !important;
+            background-image: linear-gradient(180deg, #0f172a 0%, #020617 100%) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+            width: 300px !important;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+            padding-top: 1rem !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+
+        /* Sidebar Logo & Branding */
+        .sidebar-branding {
+            text-align: center;
+            padding: 1.5rem 0;
+            margin-bottom: 1rem;
+        }
+        .sidebar-branding img {
+            width: 80px;
+            margin-bottom: 10px;
+            mix-blend-mode: screen;
+            border-radius: 16px;
+            filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
+        }
+        .sidebar-title {
+            font-size: 1.8rem !important;
+            font-weight: 800 !important;
+            background: linear-gradient(to right, #ffffff, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0 !important;
+        }
+        .sidebar-subtitle {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-top: -5px;
+            font-style: italic;
+        }
+
+        /* Sidebar User Info */
+        .sidebar-user-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .sidebar-welcome {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .sidebar-username {
+            font-weight: 600;
+            color: #60a5fa;
+            display: block;
+        }
+
+        /* Navigation Buttons in Sidebar */
         [data-testid="stSidebar"] .stButton > button {
-            background: rgba(255, 255, 255, 0.03) !important;
-            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            background: transparent !important;
+            border: 1px solid transparent !important;
             text-align: left !important;
-            padding: 12px 18px !important;
+            padding: 10px 15px !important;
             margin-bottom: 4px !important;
             box-shadow: none !important;
+            color: #94a3b8 !important;
+            justify-content: flex-start !important;
+            font-weight: 500 !important;
+            border-radius: 10px !important;
         }
 
         [data-testid="stSidebar"] .stButton > button:hover {
             background: rgba(59, 130, 246, 0.1) !important;
-            border-color: rgba(59, 130, 246, 0.3) !important;
+            color: #ffffff !important;
+            border-color: rgba(59, 130, 246, 0.2) !important;
+            transform: none !important;
         }
 
-        /* Active Page Button Highlight */
-        [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-            border: none !important;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2) !important;
+        /* Active Navigation Button */
+        [data-testid="stSidebar"] .nav-active button {
+            background: rgba(59, 130, 246, 0.15) !important;
+            color: #ffffff !important;
+            border-left: 4px solid #3b82f6 !important;
+            border-radius: 4px 10px 10px 4px !important;
+            font-weight: 700 !important;
         }
 
-        .stButton > button:hover {
-            transform: scale(1.02);
-            box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4) !important;
+        /* Profile & Logout at Bottom */
+        .sidebar-footer {
+            margin-top: auto;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* Tab Styling */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 12px;
-            background-color: transparent;
-        }
+        /* Hide Default Elements */
+        [data-testid="stSidebarNav"] { display: none !important; }
         
-        .stTabs [data-baseweb="tab"] {
-            background-color: rgba(30, 41, 59, 0.3);
-            border-radius: 12px;
-            padding: 8px 18px;
-            color: #94a3b8;
-            font-weight: 500;
-        }
-        
-        .stTabs [aria-selected="true"] {
-            background-color: #3b82f6 !important;
-            color: white !important;
-        }
-
         /* Mobile Sidebar Optimization */
         @media (max-width: 768px) {
             [data-testid="stSidebar"] {
-                width: 100% !important;
+                width: 85vw !important;
             }
             [data-testid="stMetricValue"] {
                 font-size: 1.4rem !important;

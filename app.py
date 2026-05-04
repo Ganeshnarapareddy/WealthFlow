@@ -78,6 +78,7 @@ except Exception:
 # Import UI Components
 from components.styles import apply_styles
 from components.ui_elements import card_metric, section_header, empty_state
+from components.sidebar import render_sidebar
 
 # Constants
 ASSET_TYPES = ["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "Other"]
@@ -87,7 +88,7 @@ st.set_page_config(
     page_title="WealthFlow Pro",
     page_icon=LOGO_B64 if LOGO_B64 else "💎",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # --- APPLE HOME SCREEN ICON ---
@@ -96,11 +97,8 @@ if LOGO_B64:
 
 # --- GLOBAL STYLES ---
 st.markdown("""<style>
-    [data-testid="stSidebar"], [data-testid="stSidebarNav"], button[kind="header"] {
-        display: none !important;
-    }
     .main .block-container {
-        padding-top: 0 !important;
+        padding-top: 1.5rem !important;
     }
 </style>""", unsafe_allow_html=True)
 
@@ -233,6 +231,7 @@ if 'sym' not in st.session_state:
 if 'edit_asset_id' not in st.session_state: st.session_state['edit_asset_id'] = None
 if 'page' not in st.session_state: st.session_state['page'] = 'Dashboard'
 if 'show_menu' not in st.session_state: st.session_state['show_menu'] = False
+if 'should_collapse_sidebar' not in st.session_state: st.session_state['should_collapse_sidebar'] = False
 if 'delete_confirm' not in st.session_state: st.session_state['delete_confirm'] = {}
 if 'sub_added' not in st.session_state: st.session_state['sub_added'] = False
 if 'budget_added' not in st.session_state: st.session_state['budget_added'] = False
@@ -255,29 +254,15 @@ if 'card_add_version' not in st.session_state: st.session_state['card_add_versio
 
 apply_styles()
 
-# --- HIDE DEFAULT SIDEBAR & HEADER ---
-st.markdown("""
-    <style>
-    /* Native MENU Tag Button */
-    .stButton > button:first-child:not([key="close_ov"]):not([key^="ov_"]) {
-        /* This selector is a bit generic, let's target the tag specifically if possible */
-    }
-    
-    .stButton > button {
-        transition: all 0.2s ease !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# --- SIDEBAR NAVIGATION ---
+render_sidebar(st.session_state.user, LOGO_B64, FinanceService, AuthService, cookies)
 
-# Function to handle navigation
-def nav_to(p):
-    st.session_state['page'] = p
-    st.session_state['show_menu'] = False
-    # Reset transaction filters when moving between pages
-    for k in ["hist_year", "hist_month", "hist_day", "hist_type"]:
-        if k in st.session_state:
-            del st.session_state[k]
-    st.rerun()
+# --- PAGE CONTENT ---
+
+def fmt(val):
+    if val is None:
+        return f"{st.session_state['sym']}0.00"
+    return f"{st.session_state['sym']}{val:,.2f}"
 
 # Delete confirmation helper
 def render_delete_button(item_id, button_key, delete_func, user_id, item_name="item"):
@@ -306,129 +291,10 @@ def render_delete_button(item_id, button_key, delete_func, user_id, item_name="i
                 st.session_state['delete_confirm'][conf_key] = False
                 st.rerun()
 
-# --- CUSTOM MENU TAG ---
-if not st.session_state['show_menu']:
-    # Use a clear key for the tag button
-    if st.button("💎 MENU", key="main_menu_tag"):
-        st.session_state['show_menu'] = True
-        st.rerun()
-    
-    # Position the tag button
-    st.markdown("""
-        <style>
-        .stButton > button[key="main_menu_tag"] {
-            position: fixed !important;
-            top: 25px !important;
-            left: 0 !important;
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-            color: white !important;
-            border-radius: 0 12px 12px 0 !important;
-            width: 100px !important;
-            height: 45px !important;
-            z-index: 1000 !important;
-            border: none !important;
-            font-weight: 800 !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-# --- OVERLAY MENU ---
-if st.session_state['show_menu']:
-    # The 'X' button needs to be at the very top of the DOM to be interactive
-    # And we use a standard Streamlit layout to ensure it's a real button
-    
-    col_space, col_close = st.columns([10, 2])
-    with col_close:
-        if st.button("✕ CLOSE", key="close_ov", use_container_width=True):
-            st.session_state['show_menu'] = False
-            st.rerun()
-            
-    # Centered Logo and Credit
-    logo_top = f'<img src="{LOGO_B64}" style="width: 100px; display: block; margin: 0 auto; mix-blend-mode: screen; border-radius: 20px;">' if LOGO_B64 else "💎"
-    st.markdown(f"<div style='text-align:center; margin-top:20px;'>{logo_top}</div>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align:center; color:white; font-size:2.8rem; margin-top:0px;'>WealthFlow</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#94a3b8; font-size:0.9rem; margin-top:-10px; font-style:italic;'>Made by Ganesh Narapareddy</p>", unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Navigation Buttons (Mobile Optimized)
-    _, c_btns, _ = st.columns([0.1, 0.8, 0.1])
-    with c_btns:
-        pages = {
-            "Dashboard": "📊 Dashboard",
-            "Transactions": "💸 Transactions",
-            "Budgets": "📋 Budgets",
-            "Subscriptions": "💳 Subscriptions",
-            "Loans": "💰 Loans and EMI",
-            "Credit Cards": "💳 Credit Cards",
-            "Goals": "🎯 Goals",
-            "Assets": "📈 Assets",
-            "Settings": "⚙️ Settings"
-        }
-        
-        for p_id, p_label in pages.items():
-            if st.button(p_label, key=f"ov_{p_id}", use_container_width=True):
-                nav_to(p_id)
-        
-        # Admin User Management
-        if st.session_state.user['role'] == 'admin':
-            if st.button("👥 User Management", key="ov_Admin", use_container_width=True):
-                nav_to("Admin")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🔓 Logout", key="ov_Logout", use_container_width=True, type="secondary"):
-            token = cookies.get('wealthflow_remember_token')
-            AuthService.clear_session(token)
-            if token:
-                del cookies['wealthflow_remember_token']
-                cookies.save()
-            # Clear localStorage backup
-            st_javascript("localStorage.removeItem('wealthflow_remember_token');")
-            st.session_state.user = None
-            st.rerun()
-    
-    st.stop()
-
-# --- PAGE CONTENT ---
-
-def fmt(val):
-    if val is None:
-        return f"{st.session_state['sym']}0.00"
-    return f"{st.session_state['sym']}{val:,.2f}"
-
 page = st.session_state['page']
 
 if page == "Dashboard":
     # v1.1 - Dashboard with Daily Analytics
-    # Top Profile Bar
-    t1, t2 = st.columns([0.85, 0.15])
-    with t2:
-        with st.popover("👤 Profile", use_container_width=True):
-            st.markdown(f"**Username:** `{st.session_state.user['username']}`")
-            # Safety check for short_id in existing sessions
-            sid_display = st.session_state.user.get('short_id', '58184')
-            st.markdown(f"**System ID:** `{sid_display}`")
-            st.markdown("---")
-            new_name = st.text_input("Change Username", value=st.session_state.user['username'])
-            if st.button("Update Name", use_container_width=True):
-                if AuthService.update_username(uid, new_name):
-                    st.session_state.user['username'] = new_name
-                    st.success("Name updated!")
-                    st.rerun()
-                else:
-                    st.error("Name already taken")
-            st.markdown("---")
-            if st.button("Logout", use_container_width=True, type="primary"):
-                token = cookies.get('wealthflow_remember_token')
-                AuthService.clear_session(token)
-                if token:
-                    del cookies['wealthflow_remember_token']
-                    cookies.save()
-                # Clear localStorage backup
-                st_javascript("localStorage.removeItem('wealthflow_remember_token');")
-                st.session_state['user'] = None
-                st.rerun()
-
     h1, h2, h3, h4 = st.columns([2, 1.2, 1.2, 1.2])
     with h1: st.markdown('<h1 class="main-header">Command Center</h1>', unsafe_allow_html=True)
     with h2:
