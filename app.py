@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit_cookies_manager as scm
+from streamlit_javascript import st_javascript
 from datetime import datetime, timedelta
 import base64
 import os
@@ -45,6 +46,17 @@ if "user" not in st.session_state:
 # --- PERSISTENT LOGIN CHECK ---
 if not st.session_state.user:
     token = cookies.get('wealthflow_remember_token')
+    
+    # iPhone PWA Fallback: Check localStorage if cookie is missing or empty
+    if not token:
+        # st_javascript returns the value directly
+        ls_token = st_javascript("localStorage.getItem('wealthflow_remember_token');")
+        if ls_token and ls_token != "null" and isinstance(ls_token, str):
+            token = ls_token
+            # Sync back to cookie for next time
+            cookies['wealthflow_remember_token'] = token
+            cookies.save()
+
     if token:
         user_data = AuthService.validate_session(token)
         if user_data:
@@ -122,6 +134,8 @@ def login_page():
                         token = AuthService.create_session(user['id'])
                         cookies['wealthflow_remember_token'] = token
                         cookies.save()
+                        # Backup to localStorage for mobile PWA persistence
+                        st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
                     # Load saved currency preference
                     saved_sym = FinanceService.get_setting('currency_symbol', '₹', user['id'])
                     st.session_state['sym'] = saved_sym
@@ -154,6 +168,8 @@ def login_page():
                                 token = AuthService.create_session(user['id'])
                                 cookies['wealthflow_remember_token'] = token
                                 cookies.save()
+                                # Backup to localStorage for mobile PWA persistence
+                                st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
                             st.rerun()
                     else:
                         st.error(str(uid_res))
@@ -343,6 +359,8 @@ if st.session_state['show_menu']:
             if token:
                 del cookies['wealthflow_remember_token']
                 cookies.save()
+            # Clear localStorage backup
+            st_javascript("localStorage.removeItem('wealthflow_remember_token');")
             st.session_state.user = None
             st.rerun()
     
@@ -383,6 +401,8 @@ if page == "Dashboard":
                 if token:
                     del cookies['wealthflow_remember_token']
                     cookies.save()
+                # Clear localStorage backup
+                st_javascript("localStorage.removeItem('wealthflow_remember_token');")
                 st.session_state['user'] = None
                 st.rerun()
 

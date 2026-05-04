@@ -3,3 +3,4 @@ libsql-client
 pandas
 plotly
 streamlit-cookies-manager
+streamlit-javascript
