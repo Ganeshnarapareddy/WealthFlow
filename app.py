@@ -121,17 +121,19 @@ def login_page():
         
         @media (max-width: 768px) {
             .auth-container {
-                margin-top: 1vh !important;
-                padding: 1.5rem !important;
+                margin-top: 0vh !important;
+                position: relative !important;
+                top: -2vh !important;
+                padding: 1.2rem !important;
                 max-width: 95%;
             }
             .auth-logo { 
-                font-size: 1.8rem !important; 
-                margin-bottom: 0.2rem !important;
+                font-size: 1.6rem !important; 
+                margin-bottom: 0.1rem !important;
             }
             .auth-logo img {
-                width: 50px !important;
-                margin-bottom: 5px !important;
+                width: 45px !important;
+                margin-bottom: 2px !important;
             }
         }
     </style>""", unsafe_allow_html=True)
