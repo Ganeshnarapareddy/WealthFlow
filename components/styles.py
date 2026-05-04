@@ -100,15 +100,16 @@ def apply_styles():
         /* Sidebar Logo & Branding */
         .sidebar-branding {
             text-align: center;
-            padding: 1.5rem 0;
-            margin-bottom: 1rem;
+            padding: 1rem 0;
+            margin-bottom: 0.5rem;
         }
         .sidebar-branding img {
-            width: 80px;
-            margin-bottom: 10px;
+            width: 60px !important;
+            height: auto !important;
+            margin-bottom: 8px;
             mix-blend-mode: screen;
-            border-radius: 16px;
-            filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
+            border-radius: 12px;
+            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
         }
         .sidebar-title {
             font-size: 1.8rem !important;
