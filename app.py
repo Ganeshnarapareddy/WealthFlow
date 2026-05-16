@@ -616,8 +616,9 @@ if page == "Dashboard":
             df_dy = df_dy.sort_values('Date')
             
             unique_days = df_dy['Date'].nunique()
-            # Calculate dynamic width: minimum 800px, or 100px per day
-            dynamic_width = max(unique_days * 100, 800)
+            
+            # Show last 14 days by default to prevent congestion
+            x_range = [max(0, unique_days - 14) - 0.5, unique_days - 0.5] if unique_days > 14 else None
             
             fig_dy = px.bar(df_dy, x='Date', y='Amount', color='Category', 
                             title=None,
@@ -628,9 +629,15 @@ if page == "Dashboard":
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 font_color="#e2e8f0",
                 margin=dict(t=30,b=10,l=0,r=0), # Increased top margin for labels
-                width=dynamic_width,
                 height=450,
-                xaxis=dict(type='category', title=None, fixedrange=True, tickangle=0),
+                xaxis=dict(
+                    type='category', 
+                    title=None, 
+                    fixedrange=False, 
+                    tickangle=0,
+                    range=x_range,
+                    rangeslider=dict(visible=True, thickness=0.08)
+                ),
                 yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
                 legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
                 bargap=0.6  # Make bars smaller by increasing gap
@@ -653,10 +660,7 @@ if page == "Dashboard":
             max_y = totals['Amount'].max() if not totals.empty else 100
             fig_dy.update_yaxes(range=[0, max_y * 1.15])
             
-            # Wrap in a scrollable container
-            st.markdown(f'<div style="overflow-x: auto; width: 100%; padding-bottom: 20px;">', unsafe_allow_html=True)
-            st.plotly_chart(fig_dy, use_container_width=False, config={'displayModeBar': False})
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.plotly_chart(fig_dy, use_container_width=True, config={'displayModeBar': False})
         else: empty_state("No Data", "No daily spending data available.")
 
     with t_ie:
