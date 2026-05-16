@@ -69,7 +69,7 @@ class FinanceService:
             db.execute("DELETE FROM transactions WHERE id = ? AND user_id = ?", (tid, user_id))
 
     @staticmethod
-    def get_filtered_transactions(user_id, year=None, month=None, day=None, txn_type=None, limit=100):
+    def get_filtered_transactions(user_id, year=None, month=None, day=None, txn_type=None, description_search=None, category_name=None, limit=100):
         conditions = ["user_id = ?"]
         params = [user_id]
         if txn_type and txn_type != "All":
@@ -84,6 +84,12 @@ class FinanceService:
         if day and day != "All":
             conditions.append("strftime('%d', date) = ?")
             params.append(f"{int(day):02d}")
+        if description_search:
+            conditions.append("LOWER(description) LIKE ?")
+            params.append(f"%{description_search.lower()}%")
+        if category_name and category_name != "All":
+            conditions.append("category = ?")
+            params.append(category_name)
         
         where_clause = " WHERE " + " AND ".join(conditions)
         query = f"""

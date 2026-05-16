@@ -609,58 +609,91 @@ if page == "Dashboard":
         else: empty_state("No Data", "No spending data available.")
 
     with t_dy:
-        df_dy = FinanceService.get_daily_spending_by_category(uid, sel_year, sel_month)
-        if not df_dy.empty:
-            # Format dates as strings for cleaner categorical display
-            df_dy['Date'] = pd.to_datetime(df_dy['Date']).dt.strftime('%Y-%m-%d')
-            df_dy = df_dy.sort_values('Date')
+        df_dy_full = FinanceService.get_daily_spending_by_category(uid, sel_year, sel_month)
+        if not df_dy_full.empty:
+            # Add dynamic category filter
+            all_cat_names = sorted(df_dy_full['Category'].unique().tolist())
+            st.markdown("<p style='font-size: 0.9em; color: #94a3b8; margin-bottom: 5px;'>Filter by Category to see specific totals:</p>", unsafe_allow_html=True)
+            sel_cats = st.multiselect("Category", all_cat_names, default=[], label_visibility="collapsed", key="dy_cat_sel")
             
-            unique_days = df_dy['Date'].nunique()
+            if sel_cats:
+                df_dy = df_dy_full[df_dy_full['Category'].isin(sel_cats)].copy()
+            else:
+                df_dy = df_dy_full.copy()
             
-            # Show last 14 days by default to prevent congestion
-            x_range = [max(0, unique_days - 14) - 0.5, unique_days - 0.5] if unique_days > 14 else None
-            
-            fig_dy = px.bar(df_dy, x='Date', y='Amount', color='Category', 
-                            title=None,
-                            labels={'Amount': f'Amount ({st.session_state["sym"]})'},
-                            barmode='stack')
-            
-            fig_dy.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                font_color="#e2e8f0",
-                margin=dict(t=30,b=10,l=0,r=0), # Increased top margin for labels
-                height=450,
-                xaxis=dict(
-                    type='category', 
-                    title=None, 
-                    fixedrange=False, 
-                    tickangle=0,
-                    range=x_range,
-                    rangeslider=dict(visible=True, thickness=0.08)
-                ),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
-                legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
-                bargap=0.6  # Make bars smaller by increasing gap
-            )
-            
-            # Add totals on top of bars
-            totals = df_dy.groupby('Date')['Amount'].sum().reset_index()
-            fig_dy.add_trace(go.Scatter(
-                x=totals['Date'],
-                y=totals['Amount'],
-                mode='text',
-                text=totals['Amount'].apply(lambda x: f"{x:,.0f}"),
-                textposition='top center',
-                showlegend=False,
-                hoverinfo='skip',
-                textfont=dict(color='#94a3b8', size=11)
-            ))
-            
-            # Ensure Y-axis has room for labels
-            max_y = totals['Amount'].max() if not totals.empty else 100
-            fig_dy.update_yaxes(range=[0, max_y * 1.15])
-            
-            st.plotly_chart(fig_dy, use_container_width=True, config={'displayModeBar': False})
+            if not df_dy.empty:
+                # Format dates as strings for cleaner categorical display
+                df_dy['Date'] = pd.to_datetime(df_dy['Date']).dt.strftime('%Y-%m-%d')
+                df_dy = df_dy.sort_values('Date')
+                
+                unique_days = df_dy['Date'].nunique()
+                
+                # Use fixed spacing per day to avoid congestion
+                dynamic_width = max(unique_days * 120, 800)
+                
+                st_colors = ['#0068c9', '#83c9ff', '#ff2b2b', '#ffabab', '#29b09d', '#7defa1', '#ff8700', '#ffd16a', '#6d3fc0', '#d5dae5']
+                fig_dy = px.bar(df_dy, x='Date', y='Amount', color='Category', 
+                                title=None,
+                                labels={'Amount': f'Amount ({st.session_state["sym"]})'},
+                                barmode='stack',
+                                color_discrete_sequence=st_colors)
+                
+                # Disable modebar and standard plotly drag behavior
+                fig_dy.update_layout(dragmode=False)
+                
+                fig_dy.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    font_color="#e2e8f0",
+                    margin=dict(t=30,b=40,l=0,r=0), # Increased bottom margin for dates
+                    height=450,
+                    width=dynamic_width,
+                    xaxis=dict(
+                        type='category', 
+                        title=None, 
+                        fixedrange=True, # No panning inside plot
+                        tickangle=0
+                    ),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
+                    bargap=0.6  # Empty space between each day
+                )
+                
+                # Add totals on top of bars
+                totals = df_dy.groupby('Date')['Amount'].sum().reset_index()
+                fig_dy.add_trace(go.Scatter(
+                    x=totals['Date'],
+                    y=totals['Amount'],
+                    mode='text',
+                    text=totals['Amount'].apply(lambda x: f"{x:,.0f}"),
+                    textposition='top center',
+                    showlegend=False,
+                    hoverinfo='skip',
+                    textfont=dict(color='#94a3b8', size=11)
+                ))
+                
+                # Ensure Y-axis has room for labels
+                max_y = totals['Amount'].max() if not totals.empty else 100
+                fig_dy.update_yaxes(range=[0, max_y * 1.15])
+                
+                import streamlit.components.v1 as components
+                raw_html = fig_dy.to_html(include_plotlyjs="cdn", config={'displayModeBar': False}, full_html=False)
+                # Inject CSS to remove body margin, hide vertical scrollbar, and style horizontal scrollbar
+                styled_html = f"""
+                <style>
+                    body {{ 
+                        margin: 0; padding: 0; overflow-y: hidden; 
+                    }}
+                    /* Custom sleek horizontal scrollbar */
+                    ::-webkit-scrollbar {{ height: 8px; }}
+                    ::-webkit-scrollbar-track {{ background: rgba(255, 255, 255, 0.05); border-radius: 4px; }}
+                    ::-webkit-scrollbar-thumb {{ background: rgba(255, 255, 255, 0.2); border-radius: 4px; }}
+                    ::-webkit-scrollbar-thumb:hover {{ background: rgba(255, 255, 255, 0.3); }}
+                </style>
+                {raw_html}
+                """
+                components.html(styled_html, height=500, scrolling=True)
+            else:
+                empty_state("No Data", "No spending data for selected categories.")
         else: empty_state("No Data", "No daily spending data available.")
 
     with t_ie:
@@ -764,6 +797,15 @@ elif page == "Transactions":
     with t2:
         # Transaction Filters
         st.markdown("#### 🔍 Filter History")
+        
+        f_search, f_cat = st.columns(2)
+        with f_search:
+            sel_desc = st.text_input("Search Notes/Description", key="hist_desc")
+        with f_cat:
+            all_cats_df = FinanceService.get_categories(uid)
+            cat_opts = ["All"] + list(all_cats_df['name'].unique()) if not all_cats_df.empty else ["All"]
+            sel_cat = st.selectbox("Category", cat_opts, key="hist_cat")
+            
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             y_opts = ["All"] + [str(y) for y in FinanceService.get_available_years(uid)]
@@ -781,7 +823,8 @@ elif page == "Transactions":
         st.divider()
         
         df_hist = FinanceService.get_filtered_transactions(
-            uid, year=sel_y, month=sel_m, day=sel_d, txn_type=sel_t, limit=100
+            uid, year=sel_y, month=sel_m, day=sel_d, txn_type=sel_t, 
+            description_search=sel_desc, category_name=sel_cat, limit=100
         )
         if not df_hist.empty:
             for _, row in df_hist.iterrows():
