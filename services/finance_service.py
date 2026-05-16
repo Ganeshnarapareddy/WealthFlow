@@ -198,7 +198,7 @@ class FinanceService:
         return pd.DataFrame(columns=['Month', 'Amount'])
 
     @staticmethod
-    def get_spending_by_category(user_id, year=None, month=None):
+    def get_spending_by_category(user_id, year=None, month=None, start_day=1):
         query = """
             SELECT Category, SUM(Amount) as Amount FROM (
                 SELECT (SELECT name FROM categories WHERE id = t.category_id) as Category, amount as Amount, date, user_id, type
@@ -212,7 +212,6 @@ class FinanceService:
         params = [user_id]
         if year and year != "All" and month and month != "All":
             query += " AND SUBSTR(date, 1, 10) >= ? AND SUBSTR(date, 1, 10) <= ?"
-            start_day = int(FinanceService.get_setting('fiscal_month_start_day', '1', user_id))
             start_date = date(int(year), month, start_day).strftime("%Y-%m-%d")
             if month == 12:
                 end_date = (date(int(year) + 1, 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -238,7 +237,7 @@ class FinanceService:
         return pd.DataFrame(columns=["Category", "Amount"])
 
     @staticmethod
-    def get_daily_spending_by_category(user_id, year=None, month=None):
+    def get_daily_spending_by_category(user_id, year=None, month=None, start_day=1):
         query = """
             SELECT Date, Category, SUM(Amount) as Amount FROM (
                 SELECT SUBSTR(date, 1, 10) as Date, 
@@ -256,7 +255,6 @@ class FinanceService:
         params = [user_id]
         if year and year != "All" and month and month != "All":
             query += " AND SUBSTR(Date, 1, 10) >= ? AND SUBSTR(Date, 1, 10) <= ?"
-            start_day = int(FinanceService.get_setting('fiscal_month_start_day', '1', user_id))
             start_date = date(int(year), month, start_day).strftime("%Y-%m-%d")
             if month == 12:
                 end_date = (date(int(year) + 1, 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")

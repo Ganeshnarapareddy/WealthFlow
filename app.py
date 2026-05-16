@@ -588,7 +588,7 @@ if page == "Dashboard":
     # Dashboard Tabs
     t_sp, t_dy, t_ie, t_tr, t_we, t_bu = st.tabs(["📊 Category", "📅 Daily", "📊 Income/Expense", "📈 Trend", "💰 Wealth", "🔥 Burn"])
     with t_sp:
-        df_sp = FinanceService.get_spending_by_category(uid, sel_year, sel_month)
+        df_sp = FinanceService.get_spending_by_category(uid, sel_year, sel_month, start_day=fiscal_start_day or 1)
         if not df_sp.empty:
             fig = px.bar(df_sp, x='Category', y='Amount', color='Category', text_auto='.2f')
             # Dynamic width to ensure readability with many categories
@@ -609,7 +609,57 @@ if page == "Dashboard":
         else: empty_state("No Data", "No spending data available.")
 
     with t_dy:
-        df_dy_full = FinanceService.get_daily_spending_by_category(uid, sel_year, sel_month)
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            if 'dy_month_mode' not in st.session_state:
+                st.session_state['dy_month_mode'] = st.session_state.get('month_mode', "Calendar")
+                
+            dy_mode = st.radio(
+                "Filter by:", ["Calendar", "Fiscal"], 
+                index=0 if st.session_state['dy_month_mode'] == "Calendar" else 1,
+                horizontal=True, key="dy_month_mode_radio"
+            )
+            if dy_mode != st.session_state['dy_month_mode']:
+                st.session_state['dy_month_mode'] = dy_mode
+                st.rerun()
+
+        with c2:
+            if 'dy_sel_month' not in st.session_state:
+                st.session_state['dy_sel_month'] = st.session_state.get('selected_month', "All")
+
+            lbl_year = sel_year if sel_year != "All" else datetime.now().year
+
+            if dy_mode == "Fiscal":
+                dy_fiscal_day_val = int(FinanceService.get_setting('fiscal_month_start_day', '1', uid))
+                month_options = ["All"]
+                month_map = [None]
+                for m in range(1, 13):
+                    label = FinanceService.get_fiscal_month_label(lbl_year, m, dy_fiscal_day_val)
+                    month_options.append(label)
+                    month_map.append(m)
+                
+                try:
+                    idx = month_map.index(st.session_state['dy_sel_month']) if st.session_state['dy_sel_month'] != "All" else 0
+                except ValueError:
+                    idx = 0
+                
+                sel_label = st.selectbox("Select Month", month_options, index=idx, key="dy_month_sel")
+                dy_sel_month = "All" if sel_label == "All" else month_map[month_options.index(sel_label)]
+            else:
+                month_display = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                try:
+                    idx = int(st.session_state['dy_sel_month']) if st.session_state['dy_sel_month'] != "All" else 0
+                except ValueError:
+                    idx = 0
+                sel_label = st.selectbox("Select Month", month_display, index=idx, key="dy_month_sel")
+                dy_sel_month = "All" if sel_label == "All" else month_display.index(sel_label)
+            
+            if dy_sel_month != st.session_state['dy_sel_month']:
+                st.session_state['dy_sel_month'] = dy_sel_month
+                st.rerun()
+
+        dy_fiscal_start = int(FinanceService.get_setting('fiscal_month_start_day', '1', uid)) if dy_mode == "Fiscal" else 1
+        df_dy_full = FinanceService.get_daily_spending_by_category(uid, sel_year, dy_sel_month, start_day=dy_fiscal_start)
         if not df_dy_full.empty:
             # Add dynamic category filter
             all_cat_names = sorted(df_dy_full['Category'].unique().tolist())
@@ -624,9 +674,26 @@ if page == "Dashboard":
             if not df_dy.empty:
                 # Format dates as strings for cleaner categorical display
                 df_dy['Date'] = pd.to_datetime(df_dy['Date']).dt.strftime('%Y-%m-%d')
-                df_dy = df_dy.sort_values('Date')
+                df_dy = df_dy.sort_values('Date', ascending=False)
                 
-                unique_days = df_dy['Date'].nunique()
+                if sel_year != "All" and dy_sel_month != "All":
+                    start_date = datetime(int(sel_year), dy_sel_month, dy_fiscal_start).date()
+                    import calendar
+                    if dy_mode == "Fiscal":
+                        if dy_sel_month == 12:
+                            end_date = datetime(int(sel_year) + 1, 1, dy_fiscal_start).date() - timedelta(days=1)
+                        else:
+                            end_date = datetime(int(sel_year), dy_sel_month + 1, dy_fiscal_start).date() - timedelta(days=1)
+                    else:
+                        _, last_day = calendar.monthrange(int(sel_year), dy_sel_month)
+                        end_date = datetime(int(sel_year), dy_sel_month, last_day).date()
+                    
+                    full_date_range = pd.date_range(start_date, end_date).strftime('%Y-%m-%d').tolist()
+                    cat_order = full_date_range[::-1]
+                else:
+                    cat_order = df_dy['Date'].unique().tolist()
+                
+                unique_days = len(cat_order)
                 
                 # Use fixed spacing per day to avoid congestion
                 dynamic_width = max(unique_days * 120, 800)
@@ -651,7 +718,9 @@ if page == "Dashboard":
                         type='category', 
                         title=None, 
                         fixedrange=True, # No panning inside plot
-                        tickangle=0
+                        tickangle=0,
+                        categoryorder='array',
+                        categoryarray=cat_order
                     ),
                     yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
                     legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
