@@ -591,19 +591,19 @@ if page == "Dashboard":
         df_sp = FinanceService.get_spending_by_category(uid, sel_year, sel_month, start_day=fiscal_start_day or 1)
         if not df_sp.empty:
             fig = px.bar(df_sp, x='Category', y='Amount', color='Category', text_auto='.2f')
-            # Dynamic width to ensure readability with many categories
-            chart_width = max(len(df_sp) * 100, 700) 
+            # Dynamic width to ensure readability with many categories and space between each bar
+            chart_width = max(800, len(df_sp) * 120) 
             fig.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 font_color="#e2e8f0", showlegend=False,
                 margin=dict(t=30,b=20,l=0,r=0),
                 width=chart_width,
-                xaxis=dict(fixedrange=True), yaxis=dict(fixedrange=True)
+                xaxis=dict(fixedrange=True), yaxis=dict(fixedrange=True),
+                bargap=0.5
             )
             fig.update_traces(textfont_color='white', textposition='outside')
             
-            # Use custom HTML for horizontal scrolling
-            st.markdown('<div style="overflow-x: auto; width: 100%; border-radius: 12px;">', unsafe_allow_html=True)
+            st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
             st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
         else: empty_state("No Data", "No spending data available.")
@@ -695,8 +695,9 @@ if page == "Dashboard":
                 
                 unique_days = len(cat_order)
                 
-                # Use fixed spacing per day to avoid congestion
-                dynamic_width = max(unique_days * 120, 800)
+                # Ensure each daily bar has at least 80px space, with a minimum overall width of 800px
+                dynamic_width = max(800, unique_days * 80)
+                bar_gap = 0.5
                 
                 st_colors = ['#0068c9', '#83c9ff', '#ff2b2b', '#ffabab', '#29b09d', '#7defa1', '#ff8700', '#ffd16a', '#6d3fc0', '#d5dae5']
                 fig_dy = px.bar(df_dy, x='Date', y='Amount', color='Category', 
@@ -724,7 +725,7 @@ if page == "Dashboard":
                     ),
                     yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
                     legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
-                    bargap=0.6  # Empty space between each day
+                    bargap=bar_gap  # Empty space between each day
                 )
                 
                 # Add totals on top of bars

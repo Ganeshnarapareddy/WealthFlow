@@ -372,19 +372,6 @@ class FinanceService:
     @staticmethod
     def get_fiscal_data(user_id, year, month, start_day):
         """Fetch transaction data for a specific fiscal month or 'All' months."""
-        if month == "All":
-            # Year-wide range
-            start_date_str = f"{year}-01-01"
-            end_date_str = f"{year}-12-31"
-        else:
-            # Specific month range
-            m_int = int(month)
-            start_date_str = date(int(year), m_int, start_day).strftime("%Y-%m-%d")
-            if m_int == 12:
-                end_date_str = (date(int(year) + 1, 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
-            else:
-                end_date_str = (date(int(year), m_int + 1, start_day) - timedelta(days=1)).strftime("%Y-%m-%d")
-            
         # Pull ALL transactions for this user and filter in Python to avoid SQLite date issues
         query = """
             SELECT amount, date, type FROM (
@@ -402,7 +389,39 @@ class FinanceService:
                 # Safety check for NULL values
                 val = r[0] if r[0] is not None else 0.0
                 amt, dt, t_type = float(val), str(r[1])[:10], str(r[2] or 'Expense').upper()
-                if start_date_str <= dt <= end_date_str:
+                
+                try:
+                    txn_date = datetime.strptime(dt, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+
+                in_range = False
+                if year == "All":
+                    if month == "All":
+                        in_range = True
+                    else:
+                        m_int = int(month)
+                        txn_year = txn_date.year
+                        start_date = date(txn_year, m_int, start_day)
+                        if m_int == 12:
+                            end_date = date(txn_year + 1, 1, start_day) - timedelta(days=1)
+                        else:
+                            end_date = date(txn_year, m_int + 1, start_day) - timedelta(days=1)
+                        in_range = (start_date <= txn_date <= end_date)
+                else:
+                    y_int = int(year)
+                    if month == "All":
+                        in_range = (txn_date.year == y_int)
+                    else:
+                        m_int = int(month)
+                        start_date = date(y_int, m_int, start_day)
+                        if m_int == 12:
+                            end_date = date(y_int + 1, 1, start_day) - timedelta(days=1)
+                        else:
+                            end_date = date(y_int, m_int + 1, start_day) - timedelta(days=1)
+                        in_range = (start_date <= txn_date <= end_date)
+                
+                if in_range:
                     if t_type == 'INCOME':
                         inc += amt
                     else:

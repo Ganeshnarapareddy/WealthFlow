@@ -227,7 +227,6 @@ def apply_styles():
             border-radius: 24px !important;
             padding: 10px !important;
         }
-        
         /* Ensure the inner Streamlit notification doesn't have its own fixed positioning */
         .center-popup [data-testid="stNotification"] {
             position: relative !important;
@@ -236,6 +235,34 @@ def apply_styles():
             transform: none !important;
             width: 100% !important;
             margin: 0 !important;
+        }
+
+        /* Custom horizontal scrolling for Plotly charts */
+        .scrollable-chart {
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            width: 100% !important;
+            padding-bottom: 5px;
+        }
+        .scrollable-chart [data-testid="elementContainer"],
+        .scrollable-chart [data-testid="stPlotlyChart"] {
+            width: fit-content !important;
+            min-width: fit-content !important;
+        }
+        /* Sleek custom scrollbar for Plotly charts */
+        .scrollable-chart::-webkit-scrollbar {
+            height: 8px;
+        }
+        .scrollable-chart::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+        .scrollable-chart::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        .scrollable-chart::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
         </style>
     """, unsafe_allow_html=True)
