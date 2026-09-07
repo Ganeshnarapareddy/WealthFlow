@@ -1,4 +1,6 @@
 import streamlit as st
+if not hasattr(st, "cache"):
+    st.cache = st.cache_data
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
