@@ -122,7 +122,28 @@ class TursoManager:
                 UNIQUE(user_id, alert_id, month_year))""",
             """CREATE TABLE IF NOT EXISTS user_sessions (
                 id TEXT PRIMARY KEY, user_id TEXT, token TEXT UNIQUE,
-                expiry TEXT, created_at TEXT)"""
+                expiry TEXT, created_at TEXT)""",
+            """CREATE TABLE IF NOT EXISTS trips (
+                id TEXT PRIMARY KEY, user_id TEXT, name TEXT, description TEXT,
+                target_budget REAL DEFAULT 0, start_date TEXT, end_date TEXT,
+                status TEXT DEFAULT 'active', created_at TEXT)""",
+            """CREATE TABLE IF NOT EXISTS trip_members (
+                id TEXT PRIMARY KEY, trip_id TEXT, name TEXT,
+                weight REAL DEFAULT 1.0, max_budget REAL DEFAULT NULL,
+                created_at TEXT)""",
+            """CREATE TABLE IF NOT EXISTS trip_advances (
+                id TEXT PRIMARY KEY, trip_id TEXT, member_id TEXT,
+                amount REAL, description TEXT, date TEXT)""",
+            """CREATE TABLE IF NOT EXISTS trip_expenses (
+                id TEXT PRIMARY KEY, trip_id TEXT, payer_member_id TEXT,
+                paid_from_pool INTEGER DEFAULT 0, amount REAL,
+                description TEXT, date TEXT, split_type TEXT DEFAULT 'equal')""",
+            """CREATE TABLE IF NOT EXISTS trip_expense_splits (
+                id TEXT PRIMARY KEY, expense_id TEXT, member_id TEXT,
+                weight REAL DEFAULT 1.0, share_amount REAL)""",
+            """CREATE TABLE IF NOT EXISTS trip_settlements (
+                id TEXT PRIMARY KEY, trip_id TEXT, from_name TEXT,
+                to_name TEXT, amount REAL, settled_at TEXT)"""
         ]
         
         for q in ddl:

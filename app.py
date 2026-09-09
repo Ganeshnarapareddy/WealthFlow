@@ -20,6 +20,7 @@ from services.asset_service import AssetService
 from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
 from services.auth_service import AuthService
+from services.trip_service import TripService
 
 # --- LOGO HELPER ---
 def get_base64_logo():
@@ -253,6 +254,13 @@ if 'card_txn_deleted' not in st.session_state: st.session_state['card_txn_delete
 if 'loan_given_version' not in st.session_state: st.session_state['loan_given_version'] = 0
 if 'loan_taken_version' not in st.session_state: st.session_state['loan_taken_version'] = 0
 if 'card_add_version' not in st.session_state: st.session_state['card_add_version'] = 0
+if 'active_trip_id' not in st.session_state: st.session_state['active_trip_id'] = None
+if 'trip_added' not in st.session_state: st.session_state['trip_added'] = False
+if 'trip_deleted' not in st.session_state: st.session_state['trip_deleted'] = False
+if 'trip_expense_added' not in st.session_state: st.session_state['trip_expense_added'] = False
+if 'trip_advance_added' not in st.session_state: st.session_state['trip_advance_added'] = False
+if 'trip_member_added' not in st.session_state: st.session_state['trip_member_added'] = False
+if 'edit_member_id' not in st.session_state: st.session_state['edit_member_id'] = None
 
 apply_styles()
 
@@ -1517,6 +1525,513 @@ elif page == "Assets":
             with ac4:
                 render_delete_button(row['id'], f"adel_{row['id']}", AssetService.delete_asset, uid, row['Name'])
             st.divider()
+
+elif page == "TripFlow":
+    st.markdown('<h1 class="main-header">🌴 TripFlow</h1>', unsafe_allow_html=True)
+
+    # Success / Action Popups
+    if st.session_state.get('trip_added'):
+        st.success("Trip created successfully!")
+        st.session_state['trip_added'] = False
+    if st.session_state.get('trip_updated'):
+        st.success("Trip details updated successfully!")
+        st.session_state['trip_updated'] = False
+    if st.session_state.get('trip_deleted'):
+        st.info("Trip deleted.")
+        st.session_state['trip_deleted'] = False
+    if st.session_state.get('trip_expense_added'):
+        st.success("Expense recorded!")
+        st.session_state['trip_expense_added'] = False
+    if st.session_state.get('trip_advance_added'):
+        st.success("Advance pool contribution recorded!")
+        st.session_state['trip_advance_added'] = False
+    if st.session_state.get('trip_member_added'):
+        st.success("Friend added to trip!")
+        st.session_state['trip_member_added'] = False
+    if st.session_state.get('settlement_recorded'):
+        st.success("Payment recorded in settlements ledger! Net balance updated.")
+        st.session_state['settlement_recorded'] = False
+
+    # Fetch all user trips
+    df_trips = TripService.get_trips(uid)
+
+    # Top Control Bar: Trip Selection & Creation
+    tc1, tc2 = st.columns([3, 1.2])
+
+    with tc2:
+        with st.popover("➕ Create New Trip", use_container_width=True):
+            st.markdown("### 🌴 Plan a New Trip")
+            with st.form("new_trip_form", clear_on_submit=True):
+                t_name = st.text_input("Trip Name *", placeholder="e.g. Pune Weekend, Goa 2026")
+                t_desc = st.text_input("Description / Destination", placeholder="e.g. Road trip with college friends")
+                t_target = st.number_input("Target Total Budget (Optional)", min_value=0.0, step=500.0, value=None, placeholder="e.g. 30000")
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    t_start = st.date_input("Start Date", value=datetime.now().date())
+                with col_d2:
+                    t_end = st.date_input("End Date", value=datetime.now().date() + timedelta(days=2))
+                
+                if st.form_submit_button("Create Trip", use_container_width=True, type="primary"):
+                    if not t_name or not t_name.strip():
+                        st.error("Please provide a trip name.")
+                    else:
+                        new_tid = TripService.create_trip(uid, t_name, t_desc, t_target or 0.0, t_start, t_end)
+                        # Add user as the first friend by default
+                        user_display_name = st.session_state.user.get('username', 'Me')
+                        TripService.add_member(new_tid, user_display_name, weight=1.0)
+                        st.session_state['active_trip_id'] = new_tid
+                        st.session_state['trip_added'] = True
+                        st.rerun()
+
+    with tc1:
+        if not df_trips.empty:
+            trip_map = {f"{r['name']} ({'🟢 Active' if r['status'] == 'active' else '🔒 Settled'})": r['id'] for _, r in df_trips.iterrows()}
+            
+            current_idx = 0
+            if st.session_state.get('active_trip_id'):
+                try:
+                    current_idx = list(trip_map.values()).index(st.session_state['active_trip_id'])
+                except ValueError:
+                    current_idx = 0
+            
+            sel_trip_label = st.selectbox("Select Trip", list(trip_map.keys()), index=current_idx, label_visibility="collapsed", key="trip_selector_sel")
+            selected_trip_id = trip_map[sel_trip_label]
+            if selected_trip_id != st.session_state.get('active_trip_id'):
+                st.session_state['active_trip_id'] = selected_trip_id
+                st.rerun()
+        else:
+            st.info("No trips found. Click **➕ Create New Trip** to get started!")
+
+    active_tid = st.session_state.get('active_trip_id')
+
+    if active_tid:
+        summary = TripService.calculate_trip_summary(active_tid)
+        
+        if summary and summary.get('trip'):
+            current_trip = summary['trip']
+            is_active_trip = (current_trip['status'] == 'active')
+
+            # Trip Header Card with Edit, Status Toggle, Refresh and Delete Options
+            st.markdown("<br>", unsafe_allow_html=True)
+            th1, th2, th3 = st.columns([2.3, 2.2, 0.7])
+            with th1:
+                dates_str = f"📅 {current_trip['start_date']}" + (f" → {current_trip['end_date']}" if current_trip['end_date'] else "")
+                desc_str = f" • {current_trip['description']}" if current_trip['description'] else ""
+                st.markdown(f"### {current_trip['name']}")
+                st.caption(f"{dates_str}{desc_str}")
+            with th2:
+                btn_c1, btn_c2, btn_c3 = st.columns(3)
+                with btn_c1:
+                    with st.popover("✏️ Edit", use_container_width=True, help="Edit trip details and target budget"):
+                        st.markdown(f"#### ✏️ Edit {current_trip['name']}")
+                        with st.form(f"edit_trip_form_{active_tid}"):
+                            et_name = st.text_input("Trip Name *", value=current_trip['name'])
+                            et_desc = st.text_input("Description / Destination", value=current_trip['description'] or "")
+                            et_tgt = st.number_input("Target Total Budget", min_value=0.0, value=float(current_trip['target_budget'] or 0.0), step=500.0)
+                            
+                            s_val = datetime.strptime(current_trip['start_date'], "%Y-%m-%d").date() if current_trip['start_date'] else datetime.now().date()
+                            e_val = datetime.strptime(current_trip['end_date'], "%Y-%m-%d").date() if current_trip['end_date'] else datetime.now().date()
+                            
+                            col_es1, col_es2 = st.columns(2)
+                            with col_es1:
+                                et_start = st.date_input("Start Date", value=s_val)
+                            with col_es2:
+                                et_end = st.date_input("End Date", value=e_val)
+                            
+                            if st.form_submit_button("Save Changes", type="primary", use_container_width=True):
+                                if not et_name or not et_name.strip():
+                                    st.error("Trip name cannot be empty.")
+                                else:
+                                    TripService.update_trip(active_tid, et_name, et_desc, et_tgt, et_start, et_end)
+                                    st.session_state['trip_updated'] = True
+                                    st.rerun()
+
+                with btn_c2:
+                    if st.button("🔄 Refresh", key=f"rebalance_btn_{active_tid}", use_container_width=True, help="Re-sync and recalculate all splits"):
+                        TripService.rebalance_all_splits(active_tid)
+                        st.success("Rebalanced!")
+                        st.rerun()
+                with btn_c3:
+                    status_label = "🔒 Settle" if is_active_trip else "🟢 Reopen"
+                    status_btn_type = "secondary" if is_active_trip else "primary"
+                    if st.button(status_label, key=f"status_toggle_{active_tid}", use_container_width=True, type=status_btn_type):
+                        new_st = 'settled' if is_active_trip else 'active'
+                        TripService.update_trip_status(active_tid, new_st)
+                        st.rerun()
+            with th3:
+                render_delete_button(active_tid, f"del_trip_{active_tid}", TripService.delete_trip, uid, current_trip['name'])
+
+            # 4 Overview Metric Cards
+            m1, m2, m3, m4 = st.columns(4)
+            with m1:
+                card_metric("Total Trip Cost", fmt(summary['total_spent']))
+            with m2:
+                tgt_display = fmt(summary['target_budget']) if summary['target_budget'] > 0 else "No Limit"
+                card_metric("Target Budget", tgt_display)
+            with m3:
+                if summary['target_budget'] > 0:
+                    rem_color = "normal" if summary['remaining_budget'] > 0 else "inverse"
+                    card_metric("Remaining Budget", fmt(summary['remaining_budget']), delta=f"{summary['burn_pct']*100:.1f}% Spent", delta_color=rem_color)
+                else:
+                    card_metric("Remaining Budget", "N/A")
+            with m4:
+                card_metric("Pool Cash in Hand", fmt(summary['pool_cash_in_hand']), delta=f"{fmt(summary['total_advances'])} Pooled", delta_color="normal")
+
+            # Target Budget Burn Bar
+            if summary['target_budget'] > 0:
+                st.progress(summary['burn_pct'])
+                if summary['total_spent'] > summary['target_budget']:
+                    st.warning(f"⚠️ Budget Alert: Trip expenses have exceeded the target budget by {fmt(summary['total_spent'] - summary['target_budget'])}!")
+
+            # Limit Deficit Alert (L1)
+            if summary.get('has_cap_deficit'):
+                st.warning(f"⚠️ **Budget Cap Deficit Alert (L1):** All members have budget limits that total {fmt(sum((m['max_budget'] or 0.0) for m in summary['members']))}, which is less than the total trip spend of {fmt(summary['total_spent'])}. There is an uncovered deficit of **{fmt(summary['deficit_amount'])}** that cannot be capped. Please adjust individual caps.")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Trip Tabs
+            tab_settle, tab_add, tab_ledger, tab_members = st.tabs([
+                "📊 Settlement & Summary",
+                "➕ Add Expense / Advance",
+                "📜 Trip Ledger",
+                "👥 Friends & Limits"
+            ])
+
+            # ---------------------------------------------------------
+            # TAB 1: SETTLEMENT & SUMMARY
+            # ---------------------------------------------------------
+            with tab_settle:
+                if not summary['members']:
+                    empty_state("No Friends Added", "Add friends to this trip in the '👥 Friends & Limits' tab to calculate splits.")
+                else:
+                    st.markdown("#### 👥 Member Balance Matrix")
+                    
+                    for m in summary['members']:
+                        with st.container():
+                            mc1, mc2, mc3, mc4 = st.columns([2.5, 2, 2, 2.5])
+                            with mc1:
+                                cap_badge = f" <span style='background: rgba(59,130,246,0.2); color: #60a5fa; padding: 2px 6px; border-radius: 6px; font-size: 0.75rem;'>Capped at {fmt(m['max_budget'])}</span>" if m['max_budget'] else ""
+                                weight_badge = f" <span style='background: rgba(255,255,255,0.1); color: #cbd5e1; padding: 2px 6px; border-radius: 6px; font-size: 0.75rem;'>{m['weight']}x</span>" if m['weight'] != 1.0 else ""
+                                st.markdown(f"**{m['name']}**{weight_badge}{cap_badge}", unsafe_allow_html=True)
+                                st.caption(f"Advance: {fmt(m['advance_given'])} | Out-of-pocket: {fmt(m['out_of_pocket'])}")
+                            with mc2:
+                                st.markdown(f"**Paid:** {fmt(m['total_paid'])}")
+                            with mc3:
+                                st.markdown(f"**Fair Share:** {fmt(m['final_share'])}")
+                            with mc4:
+                                cur_status = m.get('current_status', 'settled')
+                                rem_bal = m.get('remaining_balance', 0.0)
+                                paid_stl = m.get('settlements_paid', 0.0)
+                                rec_stl = m.get('settlements_received', 0.0)
+                                
+                                if cur_status == 'settled':
+                                    st.markdown("<span style='color: #4ade80; font-weight: bold;'>✅ All Settled (₹0.00)</span>", unsafe_allow_html=True)
+                                    if paid_stl > 0:
+                                        st.caption(f"Cleared debt: {fmt(paid_stl)}")
+                                    elif rec_stl > 0:
+                                        st.caption(f"Received refund: {fmt(rec_stl)}")
+                                elif cur_status == 'refund':
+                                    st.markdown(f"<span style='color: #4ade80; font-weight: bold;'>🟢 Gets Back {fmt(rem_bal)}</span>", unsafe_allow_html=True)
+                                    if rec_stl > 0:
+                                        st.caption(f"Received {fmt(rec_stl)} of {fmt(m['net_balance'])}")
+                                elif cur_status == 'owes':
+                                    st.markdown(f"<span style='color: #f87171; font-weight: bold;'>🔴 Owes {fmt(-rem_bal)}</span>", unsafe_allow_html=True)
+                                    if paid_stl > 0:
+                                        st.caption(f"Paid {fmt(paid_stl)} of {fmt(-m['net_balance'])}")
+                            st.divider()
+
+                    # Settle-Up Transfers Plan with Badges & "Paid" Button
+                    st.markdown("#### 🤝 Simplified Settle-Up Plan")
+                    
+                    if not summary['settlements'] or summary.get('is_all_settled'):
+                        st.success("🎉 **All accounts are fully settled!** Everyone is all settled (0 to 0 balance reached).")
+                    
+                    if summary['settlements']:
+                        for idx, s in enumerate(summary['settlements']):
+                            sc1, sc2 = st.columns([3.5, 1.2])
+                            
+                            is_pool = (s['transfer_type'] == 'pool_cash')
+                            badge_html = "<span style='background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;'>💼 Cash in Hand</span>" if is_pool else "<span style='background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;'>👤 Friend Transfer</span>"
+                            
+                            border_color = "#10b981" if s['is_paid'] else ("#0ea5e9" if is_pool else "#8b5cf6")
+                            
+                            with sc1:
+                                action_text = f"Pull cash in hand & pay <span style='font-weight: 600; color: #4ade80;'>{s['to_name']}</span>" if is_pool else f"<span style='font-weight: 600; color: #f87171;'>{s['from_name']}</span> pays <span style='font-weight: 600; color: #4ade80;'>{s['to_name']}</span>"
+                                
+                                st.markdown(f"""
+                                <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.1); border-left: 4px solid {border_color}; border-radius: 10px; padding: 12px; margin-bottom: 8px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            {badge_html} &nbsp; {action_text}
+                                        </div>
+                                        <div style="font-size: 1.15rem; font-weight: bold; color: #ffffff;">
+                                            {fmt(s['amount'])}
+                                        </div>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            with sc2:
+                                if s['is_paid']:
+                                    st.markdown("<div style='padding-top: 10px; text-align: center;'><span style='color: #4ade80; font-weight: bold; font-size: 1rem;'>✅ Paid</span></div>", unsafe_allow_html=True)
+                                else:
+                                    if st.button("✅ Paid", key=f"pay_settle_btn_{active_tid}_{idx}", type="secondary", use_container_width=True, help=f"Record that {s['from_name']} has paid {s['to_name']} {fmt(s['remaining_amount'])}"):
+                                        TripService.record_settlement(active_tid, s['from_name'], s['to_name'], s['remaining_amount'])
+                                        st.session_state['settlement_recorded'] = True
+                                        st.rerun()
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    # Export & WhatsApp Section
+                    st.markdown("#### 📱 Share & Export (100% Local)")
+                    
+                    wa_text = TripService.generate_whatsapp_summary(active_tid, st.session_state['sym'])
+                    st.text_area("📋 WhatsApp Formatted Summary (Select All & Copy)", value=wa_text, height=200, key=f"wa_summary_text_{active_tid}_{hash(wa_text)}")
+                    st.caption("💡 Copy the formatted message above and paste it directly into your WhatsApp trip group!")
+
+                    csv_data = TripService.get_trip_csv_data(active_tid, st.session_state['sym'])
+                    clean_trip_filename = "".join(c for c in current_trip['name'] if c.isalnum() or c in (' ', '_')).rstrip().replace(' ', '_')
+                    st.download_button(
+                        label="📥 Download Trip CSV Report",
+                        data=csv_data,
+                        file_name=f"{clean_trip_filename}_Settlement.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+
+            # ---------------------------------------------------------
+            # TAB 2: ADD EXPENSE / ADVANCE
+            # ---------------------------------------------------------
+            with tab_add:
+                if not is_active_trip:
+                    st.info("🔒 This trip is marked as Settled. Reopen the trip using the button above to add new expenses or advances.")
+                elif not summary['members']:
+                    st.warning("Please add friends in the '👥 Friends & Limits' tab first before recording expenses.")
+                else:
+                    sub_exp, sub_adv = st.tabs(["💸 Log Expense", "📥 Log Advance / Pool Money"])
+                    
+                    # 1. Log Expense
+                    with sub_exp:
+                        st.markdown("##### 💸 Record a Trip Expense")
+                        with st.form("trip_add_expense_form", clear_on_submit=True):
+                            exp_desc = st.text_input("Expense Description / Label *", placeholder="e.g. Auto to station, Bikes rental, Resort, Lunch")
+                            exp_amt = st.number_input("Amount *", min_value=0.01, step=1.0, value=None, placeholder="Enter amount")
+                            exp_date = st.date_input("Date", value=datetime.now().date())
+                            
+                            payer_opts = ["💼 Pool Fund (from collected advances)"] + [m['name'] for m in summary['members']]
+                            payer_sel = st.selectbox("Paid By *", payer_opts)
+                            
+                            st.markdown("**Split Among Friends:**")
+                            member_ids = [m['id'] for m in summary['members']]
+                            member_names = [m['name'] for m in summary['members']]
+                            
+                            included_friends = st.multiselect("Included in Split", member_names, default=member_names)
+                            
+                            use_custom_weights = st.checkbox("Use custom weights for this expense (e.g. 2x for couples/extra shares)", value=False)
+                            custom_weights = {}
+                            
+                            if use_custom_weights and included_friends:
+                                st.caption("Set share weight for each included friend (1.0 = standard single share):")
+                                w_cols = st.columns(min(4, len(included_friends)))
+                                for idx, f_name in enumerate(included_friends):
+                                    matching_m = next(m for m in summary['members'] if m['name'] == f_name)
+                                    with w_cols[idx % len(w_cols)]:
+                                        w_val = st.number_input(f"{f_name}", min_value=0.1, value=float(matching_m['weight']), step=0.5, key=f"exp_w_{matching_m['id']}")
+                                        custom_weights[matching_m['id']] = w_val
+                            
+                            if st.form_submit_button("Record Expense", type="primary", use_container_width=True):
+                                if not exp_desc or not exp_desc.strip():
+                                    st.error("Please enter a description label for this expense.")
+                                elif exp_amt is None or exp_amt <= 0:
+                                    st.error("Please enter a valid amount.")
+                                elif not included_friends:
+                                    st.error("Please select at least one friend to split this expense with.")
+                                else:
+                                    paid_from_pool = (payer_sel == "💼 Pool Fund (from collected advances)")
+                                    payer_id = None if paid_from_pool else next(m['id'] for m in summary['members'] if m['name'] == payer_sel)
+                                    
+                                    if use_custom_weights:
+                                        final_weights = custom_weights
+                                    else:
+                                        final_weights = {m['id']: m['weight'] for m in summary['members'] if m['name'] in included_friends}
+                                    
+                                    # Set split_type to 'custom' if selective or custom weights, else 'equal'
+                                    is_custom = (use_custom_weights or len(included_friends) < len(summary['members']))
+                                    s_type = "custom" if is_custom else "equal"
+                                    
+                                    TripService.add_expense(active_tid, payer_id, paid_from_pool, exp_amt, exp_desc, exp_date, split_type=s_type, member_weights=final_weights)
+                                    st.session_state['trip_expense_added'] = True
+                                    st.rerun()
+
+                    # 2. Log Advance / Pool Contribution
+                    with sub_adv:
+                        st.markdown("##### 📥 Record Advance / Pool Money Given")
+                        with st.form("trip_add_advance_form", clear_on_submit=True):
+                            adv_m_name = st.selectbox("Friend Who Gave Money *", [m['name'] for m in summary['members']])
+                            adv_amt = st.number_input("Advance Amount *", min_value=0.01, step=100.0, value=None, placeholder="Enter advance amount")
+                            adv_desc = st.text_input("Notes / Description", value="Initial Pool Advance", placeholder="e.g. GPay transfer, Cash")
+                            adv_date = st.date_input("Date", value=datetime.now().date())
+                            
+                            if st.form_submit_button("Record Advance", type="primary", use_container_width=True):
+                                if adv_amt is None or adv_amt <= 0:
+                                    st.error("Please enter a valid amount.")
+                                else:
+                                    m_id = next(m['id'] for m in summary['members'] if m['name'] == adv_m_name)
+                                    TripService.add_advance(active_tid, m_id, adv_amt, adv_desc, adv_date)
+                                    st.session_state['trip_advance_added'] = True
+                                    st.rerun()
+
+            # ---------------------------------------------------------
+            # TAB 3: TRIP LEDGER
+            # ---------------------------------------------------------
+            with tab_ledger:
+                df_exp = TripService.get_expenses(active_tid)
+                df_adv = TripService.get_advances(active_tid)
+                df_settle = TripService.get_settlements(active_tid)
+
+                st.markdown("#### 💸 Itemized Expenses")
+                if df_exp.empty:
+                    st.info("No expenses recorded for this trip yet.")
+                else:
+                    for _, row in df_exp.iterrows():
+                        c1, c2, c3, c4 = st.columns([3, 2, 3, 1])
+                        with c1:
+                            st.markdown(f"**{row['description']}**")
+                            st.caption(f"📅 {row['date']}")
+                        with c2:
+                            st.markdown(f"<span style='color: #f87171; font-weight: bold;'>{fmt(row['amount'])}</span>", unsafe_allow_html=True)
+                        with c3:
+                            st.markdown(f"**Paid By:** {row['payer_name']}")
+                            if row['splits_summary']:
+                                st.caption(f"Splits: {row['splits_summary']}")
+                        with c4:
+                            render_delete_button(row['id'], f"del_exp_{row['id']}", lambda eid, _: TripService.delete_expense(eid), uid, row['description'])
+                        st.divider()
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("#### 📥 Advances & Pool Contributions")
+                if df_adv.empty:
+                    st.info("No advances pooled yet.")
+                else:
+                    for _, row in df_adv.iterrows():
+                        c1, c2, c3, c4 = st.columns([3, 2, 3, 1])
+                        with c1:
+                            st.markdown(f"**{row['member_name']}**")
+                            st.caption(f"📅 {row['date']}")
+                        with c2:
+                            st.markdown(f"<span style='color: #4ade80; font-weight: bold;'>+{fmt(row['amount'])}</span>", unsafe_allow_html=True)
+                        with c3:
+                            st.markdown(f"{row['description'] or 'Pool Contribution'}")
+                        with c4:
+                            render_delete_button(row['id'], f"del_adv_{row['id']}", lambda aid, _: TripService.delete_advance(aid), uid, "this advance")
+                        st.divider()
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("#### 🤝 Completed Settlement Payments")
+                if df_settle.empty:
+                    st.caption("No payments marked as paid yet. Click '✅ Paid' on any transfer in the Settle-Up plan to record payments.")
+                else:
+                    for _, row in df_settle.iterrows():
+                        c1, c2, c3, c4 = st.columns([3, 2, 3, 1])
+                        with c1:
+                            st.markdown(f"**{row['from_name']} ➡️ {row['to_name']}**")
+                            st.caption(f"📅 {row['settled_at']}")
+                        with c2:
+                            st.markdown(f"<span style='color: #4ade80; font-weight: bold;'>{fmt(row['amount'])}</span>", unsafe_allow_html=True)
+                        with c3:
+                            st.markdown("<span style='color: #94a3b8;'>Status: Completed</span>", unsafe_allow_html=True)
+                        with c4:
+                            render_delete_button(row['id'], f"del_stl_{row['id']}", lambda sid, _: TripService.delete_settlement(sid), uid, "this payment")
+                        st.divider()
+
+            # ---------------------------------------------------------
+            # TAB 4: FRIENDS & LIMITS (With Deletion Safety & Reassignment)
+            # ---------------------------------------------------------
+            with tab_members:
+                st.markdown("#### ➕ Add a Friend to this Trip")
+                with st.form("trip_add_member_form", clear_on_submit=True):
+                    m_name = st.text_input("Friend's Name *", placeholder="e.g. Bharat, Omsi, Rahul")
+                    m_col1, m_col2 = st.columns(2)
+                    with m_col1:
+                        m_weight = st.number_input("Share Multiplier / Weight", min_value=0.1, value=1.0, step=0.5, help="1.0 for single friend, 2.0 for a couple/pair sharing costs.")
+                    with m_col2:
+                        m_cap = st.number_input("Max Budget Cap (Optional)", min_value=0.0, step=500.0, value=None, placeholder="e.g. 5000", help="Limit this friend's total liability. Excess will be redistributed to others.")
+                    
+                    if st.form_submit_button("Add Friend", use_container_width=True, type="primary"):
+                        if not m_name or not m_name.strip():
+                            st.error("Please provide a name.")
+                        else:
+                            TripService.add_member(active_tid, m_name, weight=m_weight, max_budget=m_cap)
+                            st.session_state['trip_member_added'] = True
+                            st.rerun()
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("#### 👥 Current Trip Friends")
+                members_df = TripService.get_members(active_tid)
+                if members_df.empty:
+                    st.info("No friends added yet.")
+                else:
+                    for _, row in members_df.iterrows():
+                        mc1, mc2, mc3, mc4, mc5 = st.columns([2.5, 2, 2, 0.8, 0.8])
+                        with mc1:
+                            st.markdown(f"**{row['name']}**")
+                        with mc2:
+                            st.markdown(f"**Weight:** {row['weight']}x" + (" (Couple/Pair)" if row['weight'] == 2.0 else ""))
+                        with mc3:
+                            cap_txt = fmt(row['max_budget']) if pd.notnull(row['max_budget']) and row['max_budget'] else "No Cap"
+                            st.markdown(f"**Budget Cap:** {cap_txt}")
+                        with mc4:
+                            with st.popover("✏️", help=f"Edit {row['name']}"):
+                                st.markdown(f"**Edit {row['name']}**")
+                                with st.form(f"edit_mem_form_{row['id']}"):
+                                    edit_name = st.text_input("Name", value=row['name'], key=f"em_name_{row['id']}")
+                                    edit_weight = st.number_input("Share Multiplier / Weight", min_value=0.1, value=float(row['weight'] or 1.0), step=0.5, key=f"em_w_{row['id']}")
+                                    cur_cap = float(row['max_budget']) if pd.notnull(row['max_budget']) and row['max_budget'] is not None else None
+                                    edit_cap = st.number_input("Max Budget Cap", min_value=0.0, step=500.0, value=cur_cap, placeholder="Leave blank for no cap", key=f"em_cap_{row['id']}")
+                                    if st.form_submit_button("Save Changes", use_container_width=True, type="primary"):
+                                        TripService.update_member(row['id'], edit_name, edit_weight, edit_cap)
+                                        st.success(f"{edit_name} updated!")
+                                        st.rerun()
+                        with mc5:
+                            # Friend Deletion Safety Popover with Expense Reassignment
+                            with st.popover("🗑️", help=f"Remove {row['name']}"):
+                                activity = TripService.get_member_activity(row['id'])
+                                st.markdown(f"#### 🗑️ Remove **{row['name']}**")
+                                
+                                if activity and (activity['expense_total'] > 0 or activity['advance_total'] > 0):
+                                    st.warning(
+                                        f"⚠️ **{row['name']}** has recorded **{fmt(activity['expense_total'])}** in expenses "
+                                        f"and **{fmt(activity['advance_total'])}** in pool advances."
+                                    )
+                                    st.markdown("**To whom should this expense liability be transferred?**")
+                                    
+                                    # Build reassignment options
+                                    other_friends = [(r['id'], r['name']) for _, r in members_df.iterrows() if r['id'] != row['id']]
+                                    reassign_choices = ["💼 Pool Fund (Shared by all friends - Default)"] + [f"👤 {fn}" for fid, fn in other_friends] + ["🗑️ Delete expenses completely"]
+                                    
+                                    sel_reassign = st.selectbox("Reassign To", reassign_choices, key=f"reassign_sel_{row['id']}")
+                                    
+                                    if st.button("⚠️ Confirm Delete & Reassign", key=f"conf_del_reassign_{row['id']}", type="primary", use_container_width=True):
+                                        if sel_reassign == "💼 Pool Fund (Shared by all friends - Default)":
+                                            TripService.delete_member_with_reassignment(row['id'], reassign_to_pool=True)
+                                        elif sel_reassign == "🗑️ Delete expenses completely":
+                                            TripService.delete_member_with_reassignment(row['id'], delete_expenses=True)
+                                        else:
+                                            target_name = sel_reassign.replace("👤 ", "")
+                                            target_id = next(fid for fid, fn in other_friends if fn == target_name)
+                                            TripService.delete_member_with_reassignment(row['id'], reassign_payer_id=target_id)
+                                        
+                                        st.success(f"{row['name']} removed and expenses reassigned.")
+                                        st.rerun()
+                                else:
+                                    st.markdown(f"Are you sure you want to remove **{row['name']}** from this trip?")
+                                    if st.button("Confirm Delete", key=f"conf_del_mem_{row['id']}", type="primary", use_container_width=True):
+                                        TripService.delete_member(row['id'])
+                                        st.success(f"{row['name']} removed.")
+                                        st.rerun()
+                        st.divider()
+
+
 
 elif page == "Settings":
     st.markdown('<h1 class="main-header">Preferences</h1>', unsafe_allow_html=True)

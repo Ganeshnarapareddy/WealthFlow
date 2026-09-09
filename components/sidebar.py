@@ -62,6 +62,7 @@ def render_sidebar(user_data, logo_b64, finance_service, auth_service, cookies):
             "Credit Cards": "💳 Credit Cards",
             "Goals": "🎯 Goals",
             "Assets": "📈 Assets",
+            "TripFlow": "🌴 TripFlow",
             "Settings": "⚙️ Settings"
         }
 
