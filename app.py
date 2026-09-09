@@ -9,6 +9,8 @@ from streamlit_javascript import st_javascript
 from datetime import datetime, timedelta
 import base64
 import os
+import json
+import streamlit.components.v1 as components
 
 # Import Services
 from database import db
@@ -1786,8 +1788,77 @@ elif page == "TripFlow":
                     st.markdown("#### 📱 Share & Export (100% Local)")
                     
                     wa_text = TripService.generate_whatsapp_summary(active_tid, st.session_state['sym'])
-                    st.text_area("📋 WhatsApp Formatted Summary (Select All & Copy)", value=wa_text, height=200, key=f"wa_summary_text_{active_tid}_{hash(wa_text)}")
-                    st.caption("💡 Copy the formatted message above and paste it directly into your WhatsApp trip group!")
+                    
+                    # 1-Click Copy to Clipboard Interactive Component
+                    wa_text_json = json.dumps(wa_text)
+                    copy_component_html = f"""
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; gap: 12px; margin-top: 4px; margin-bottom: 8px;">
+                        <button id="copyBtn" onclick="copyToClipboard()" style="
+                            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                            color: #ffffff;
+                            border: none;
+                            padding: 9px 18px;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            font-size: 0.9rem;
+                            cursor: pointer;
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 8px;
+                            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+                            transition: all 0.2s ease;
+                        ">
+                            📋 Copy Summary to Clipboard
+                        </button>
+                        <span id="copyMsg" style="color: #4ade80; font-weight: 600; font-size: 0.88rem; display: none;">
+                            ✅ Copied to clipboard!
+                        </span>
+                    </div>
+                    <script>
+                    function copyToClipboard() {{
+                        const text = {wa_text_json};
+                        if (navigator.clipboard && window.isSecureContext) {{
+                            navigator.clipboard.writeText(text).then(showDone, fallbackCopy);
+                        }} else {{
+                            fallbackCopy();
+                        }}
+                    }}
+                    function fallbackCopy() {{
+                        const text = {wa_text_json};
+                        const ta = document.createElement("textarea");
+                        ta.value = text;
+                        ta.style.position = "fixed";
+                        ta.style.left = "-999999px";
+                        ta.style.top = "-999999px";
+                        document.body.appendChild(ta);
+                        ta.focus();
+                        ta.select();
+                        try {{
+                            document.execCommand('copy');
+                            showDone();
+                        }} catch (e) {{
+                            console.error('Copy failed', e);
+                        }}
+                        ta.remove();
+                    }}
+                    function showDone() {{
+                        const btn = document.getElementById('copyBtn');
+                        const msg = document.getElementById('copyMsg');
+                        btn.innerHTML = '✅ Copied!';
+                        btn.style.background = '#047857';
+                        msg.style.display = 'inline';
+                        setTimeout(() => {{
+                            btn.innerHTML = '📋 Copy Summary to Clipboard';
+                            btn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                            msg.style.display = 'none';
+                        }}, 2500);
+                    }}
+                    </script>
+                    """
+                    components.html(copy_component_html, height=52)
+
+                    st.text_area("📋 WhatsApp Formatted Summary Preview", value=wa_text, height=180, key=f"wa_summary_text_{active_tid}_{hash(wa_text)}")
+                    st.caption("💡 Click **📋 Copy Summary to Clipboard** above to copy the message, then paste it directly into your WhatsApp trip group!")
 
                     csv_data = TripService.get_trip_csv_data(active_tid, st.session_state['sym'])
                     clean_trip_filename = "".join(c for c in current_trip['name'] if c.isalnum() or c in (' ', '_')).rstrip().replace(' ', '_')
