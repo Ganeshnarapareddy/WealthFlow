@@ -113,7 +113,7 @@ def render_mobile_dock():
             st.session_state["m_page"] = "Ledger"
             st.rerun()
     with c3:
-        if st.button("", icon=":material/add:", key="m_dock_add", help="Quick add expense or income"):
+        if st.button("", icon=":material/add:", key="m_dock_add"):
             st.session_state["m_page"] = "QuickAdd"
             st.rerun()
     with c4:

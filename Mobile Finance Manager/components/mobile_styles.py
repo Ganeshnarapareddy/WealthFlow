@@ -515,7 +515,7 @@ def apply_mobile_styles():
             justify-content: center !important;
         }
 
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button {
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [data-testid="stColumn"]:not(:nth-child(3)) .stButton > button {
             height: 48px !important;
             min-height: 48px !important;
             width: 100% !important;
@@ -536,9 +536,9 @@ def apply_mobile_styles():
             box-shadow: none !important;
         }
 
-        /* Stack Material icon cleanly ABOVE label text on all 4 nav slots */
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button > div,
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button > div > span {
+        /* Stack Material icon cleanly ABOVE label text on outer 4 nav slots */
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [data-testid="stColumn"]:not(:nth-child(3)) .stButton > button > div,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [data-testid="stColumn"]:not(:nth-child(3)) .stButton > button > div > span {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
@@ -549,7 +549,7 @@ def apply_mobile_styles():
             width: 100% !important;
         }
 
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button [data-testid="stIconMaterial"] {
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [data-testid="stColumn"]:not(:nth-child(3)) .stButton > button [data-testid="stIconMaterial"] {
             font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
             font-size: 20px !important;
             line-height: 1 !important;
@@ -570,41 +570,86 @@ def apply_mobile_styles():
             text-align: center !important;
         }
 
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button[kind="primary"] {
+        /* Outer 4 nav slots styling */
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [data-testid="stColumn"]:not(:nth-child(3)) .stButton > button[kind="primary"] {
             background-color: var(--m-accent-low) !important;
             border-color: rgba(79, 134, 247, 0.34) !important;
             color: var(--m-accent) !important;
             font-weight: 600 !important;
         }
 
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button[kind="primary"] * {
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [data-testid="stColumn"]:not(:nth-child(3)) .stButton > button[kind="primary"] * {
             color: var(--m-accent) !important;
         }
 
+        /* Center Column 3 (Slot 3) layout reset */
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3),
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) > [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) .stElementContainer,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) .stButton {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
         /* Elevated Center + Quick-Add FAB — dead-center in slot 3 (50% axis) */
-        .st-key-m_dock_add button {
-            width: 48px !important;
-            min-width: 48px !important;
-            max-width: 48px !important;
-            height: 48px !important;
-            min-height: 48px !important;
-            margin: -12px auto 0 auto !important;
-            border-radius: var(--m-rad-full) !important;
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [class*="st-key-m_dock_add"] button,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) button {
+            width: 50px !important;
+            min-width: 50px !important;
+            max-width: 50px !important;
+            height: 50px !important;
+            min-height: 50px !important;
+            max-height: 50px !important;
+            margin: -14px auto 0 auto !important;
+            border-radius: 50% !important;
             background-color: var(--m-accent) !important;
             border: 2px solid var(--m-bg) !important;
             color: var(--m-accent-ink) !important;
             box-shadow: 0 6px 20px var(--m-accent-glow) !important;
             padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            position: relative !important;
+            overflow: hidden !important;
         }
-        .st-key-m_dock_add button [data-testid="stIconMaterial"] {
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [class*="st-key-m_dock_add"] button > div,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [class*="st-key-m_dock_add"] button > div > span,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [class*="st-key-m_dock_add"] button span,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) button > div,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) button > div > span,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) button span {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            text-align: center !important;
+            line-height: 1 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [class*="st-key-m_dock_add"] button [data-testid="stIconMaterial"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) button [data-testid="stIconMaterial"] {
             font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
             color: var(--m-accent-ink) !important;
-            font-size: 24px !important;
-            line-height: 1 !important;
-            margin: 0 !important;
-            display: inline-block !important;
+            font-size: 26px !important;
+            width: 26px !important;
+            height: 26px !important;
+            line-height: 26px !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
         }
-        .st-key-m_dock_add button * {
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) [class*="st-key-m_dock_add"] button *,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"]:nth-child(3) button * {
             color: var(--m-accent-ink) !important;
         }
 
