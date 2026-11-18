@@ -1141,63 +1141,117 @@ def apply_styles():
             border-color: var(--color-rule) !important;
         }
 
-        /* ============================================================
-           8. SEGMENTED TABS & CONTROLS (crisp visual separation per pill)
-        ============================================================ */
-        [data-testid="stTabs"] [role="tablist"] {
-            background-color: var(--color-paper-2);
-            border: 1px solid var(--color-rule);
-            border-radius: var(--radius-md);
-            padding: 6px !important;
-            gap: 8px !important;
-            margin-bottom: var(--space-md);
-            overflow-x: auto;
-            scrollbar-width: none;
+        /* Hide heading anchor chain-link icons (consistent across Streamlit versions) */
+        [data-testid="stHeaderActionElements"],
+        h1 a.header-anchor, h2 a.header-anchor, h3 a.header-anchor {
+            display: none !important;
         }
 
-        [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {
+        /* ============================================================
+           8. SEGMENTED TABS & CONTROLS (BaseWeb + React Aria unified pill rail)
+        ============================================================ */
+        [data-testid="stTabs"] [role="tablist"],
+        .stTabs [role="tablist"],
+        [data-testid="stTabs"] [data-baseweb="tab-list"] {
+            background-color: var(--color-paper-2) !important;
+            border: 1px solid var(--color-rule) !important;
+            border-radius: var(--radius-md) !important;
+            padding: 6px !important;
+            gap: 8px !important;
+            margin-bottom: var(--space-md) !important;
+            overflow-x: auto !important;
+            scrollbar-width: none !important;
+            display: flex !important;
+            align-items: center !important;
+            width: fit-content !important;
+            max-width: 100% !important;
+        }
+
+        [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar,
+        .stTabs [role="tablist"]::-webkit-scrollbar {
             display: none;
         }
 
-        [data-testid="stTabs"] button[role="tab"] {
+        /* Works on BOTH BaseWeb (<button role="tab">) and React Aria (<div data-testid="stTab" role="tab">) */
+        [data-testid="stTabs"] [role="tab"],
+        [data-testid="stTabs"] [data-testid="stTab"],
+        [data-testid="stTabs"] button[role="tab"],
+        .stTabs [role="tab"] {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
             border-radius: var(--radius-sm) !important;
-            padding: var(--space-xs) var(--space-md) !important;
+            padding: 0 var(--space-md) !important;
             height: 36px !important;
+            min-height: 36px !important;
             color: var(--color-ink-2) !important;
             font-family: var(--font-body) !important;
             font-size: var(--text-sm) !important;
             font-weight: 500 !important;
             border: 1px solid var(--color-rule-strong) !important;
             background-color: var(--color-paper-3) !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
             transition:
                 background-color var(--dur-micro) var(--ease-out),
                 border-color var(--dur-micro) var(--ease-out),
-                color var(--dur-micro) var(--ease-out) !important;
+                color var(--dur-micro) var(--ease-out),
+                box-shadow var(--dur-micro) var(--ease-out) !important;
         }
 
-        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            background-color: var(--color-accent-low) !important;
-            border-color: var(--color-accent-mid) !important;
-            color: var(--color-ink) !important;
+        [data-testid="stTabs"] [role="tab"] p,
+        [data-testid="stTabs"] [data-testid="stTab"] p,
+        .stTabs [role="tab"] p {
+            color: inherit !important;
+            font-weight: inherit !important;
+            font-size: var(--text-sm) !important;
+            margin: 0 !important;
+            line-height: 1.2 !important;
+            white-space: nowrap !important;
+        }
+
+        /* Appealing, unmistakable active tab highlight */
+        [data-testid="stTabs"] [role="tab"][aria-selected="true"],
+        [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"],
+        [data-testid="stTabs"] [role="tab"][data-selected="true"],
+        .stTabs [role="tab"][aria-selected="true"] {
+            background-color: var(--color-accent) !important;
+            border-color: var(--color-accent) !important;
+            color: var(--color-accent-ink) !important;
             font-weight: 600 !important;
+            box-shadow: 0 2px 10px oklch(0.64 0.19 258 / 0.34) !important;
+        }
+
+        [data-testid="stTabs"] [role="tab"][aria-selected="true"] *,
+        [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] *,
+        .stTabs [role="tab"][aria-selected="true"] * {
+            color: var(--color-accent-ink) !important;
         }
 
         @media (hover: hover) {
-            [data-testid="stTabs"] button[role="tab"]:hover {
+            [data-testid="stTabs"] [role="tab"]:not([aria-selected="true"]):hover,
+            [data-testid="stTabs"] [data-testid="stTab"]:not([aria-selected="true"]):hover,
+            .stTabs [role="tab"]:not([aria-selected="true"]):hover {
                 color: var(--color-ink) !important;
                 background-color: var(--color-paper-4) !important;
                 border-color: var(--color-field-edge) !important;
             }
         }
 
-        [data-testid="stTabs"] button[role="tab"]:focus-visible {
+        [data-testid="stTabs"] [role="tab"]:focus-visible,
+        [data-testid="stTabs"] [data-testid="stTab"]:focus-visible {
             outline: 2px solid var(--color-focus) !important;
             outline-offset: -2px !important;
         }
 
-        /* Hide Streamlit's default animated red underline */
+        /* Hide BOTH BaseWeb and React Aria default bottom underline indicators */
         [data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        [data-testid="stTabs"] [data-baseweb="tab-border"] {
+        [data-testid="stTabs"] [data-baseweb="tab-border"],
+        [data-testid="stTabs"] .react-aria-SelectionIndicator,
+        [data-testid="stTabs"] [role="tablist"]::after,
+        .stTabs .react-aria-SelectionIndicator,
+        .stTabs [role="tablist"]::after {
             display: none !important;
         }
 
@@ -1227,24 +1281,133 @@ def apply_styles():
             transition:
                 background-color var(--dur-micro) var(--ease-out),
                 border-color var(--dur-micro) var(--ease-out),
-                color var(--dur-micro) var(--ease-out) !important;
+                color var(--dur-micro) var(--ease-out),
+                box-shadow var(--dur-micro) var(--ease-out) !important;
         }
 
         [data-testid="stSegmentedControl"] button[aria-checked="true"],
         [data-testid="stButtonGroup"] button[kind="segmented_controlActive"],
         [data-testid="stButtonGroup"] button[aria-pressed="true"] {
-            background-color: var(--color-accent-low) !important;
-            border-color: var(--color-accent-mid) !important;
-            color: var(--color-ink) !important;
+            background-color: var(--color-accent) !important;
+            border-color: var(--color-accent) !important;
+            color: var(--color-accent-ink) !important;
             font-weight: 600 !important;
+            box-shadow: 0 2px 10px oklch(0.64 0.19 258 / 0.34) !important;
+        }
+
+        [data-testid="stSegmentedControl"] button[aria-checked="true"] *,
+        [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] *,
+        [data-testid="stButtonGroup"] button[aria-pressed="true"] * {
+            color: var(--color-accent-ink) !important;
         }
 
         @media (hover: hover) {
-            [data-testid="stSegmentedControl"] button:hover,
-            [data-testid="stButtonGroup"] button:hover {
+            [data-testid="stSegmentedControl"] button:not([aria-checked="true"]):hover,
+            [data-testid="stButtonGroup"] button:not([kind="segmented_controlActive"]):not([aria-pressed="true"]):hover {
                 background-color: var(--color-paper-4) !important;
                 border-color: var(--color-field-edge) !important;
                 color: var(--color-ink) !important;
+            }
+        }
+
+        /* ============================================================
+           8B. SLEEK UPCOMING DUES & ALERTS ROWS
+        ============================================================ */
+        .wf-alert-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background-color: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
+            border-left: 3px solid var(--color-rule-strong);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            min-height: 48px;
+        }
+        .wf-alert-row.tone-danger { border-left-color: var(--color-danger); }
+        .wf-alert-row.tone-warning { border-left-color: var(--color-warning); }
+        .wf-alert-row.tone-accent { border-left-color: var(--color-accent); }
+        .wf-alert-row.tone-muted { border-left-color: var(--color-ink-3); }
+
+        .wf-alert-main {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 0;
+        }
+        .wf-alert-title {
+            font-size: var(--text-sm);
+            font-weight: 600;
+            color: var(--color-ink);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .wf-alert-cat {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--color-ink-3);
+            background-color: var(--color-paper-3);
+            border: 1px solid var(--color-rule);
+            border-radius: var(--radius-full);
+            padding: 1px 8px;
+            line-height: 1.4;
+        }
+        .wf-alert-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: var(--text-xs);
+            color: var(--color-ink-3);
+        }
+        .wf-alert-due {
+            font-weight: 600;
+            padding: 1px 7px;
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .wf-alert-due.tone-danger { background: var(--color-danger-low); color: var(--color-danger); }
+        .wf-alert-due.tone-warning { background: var(--color-warning-low); color: var(--color-warning); }
+        .wf-alert-due.tone-accent { background: var(--color-accent-low); color: var(--color-accent); }
+        .wf-alert-due.tone-muted { background: var(--color-paper-3); color: var(--color-ink-2); }
+
+        .wf-alert-amt {
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+            font-size: var(--text-sm);
+            font-weight: 600;
+            color: var(--color-ink);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* Compact pill-style alert action buttons (Paid / Received) */
+        [class*="st-key-alert_act_"] .stButton > button,
+        [class*="st-key-alert_act_"] button {
+            height: 32px !important;
+            min-height: 32px !important;
+            padding: 0 14px !important;
+            border-radius: var(--radius-full) !important;
+            background-color: var(--color-paper-2) !important;
+            border: 1px solid var(--color-rule-strong) !important;
+            color: var(--color-ink-2) !important;
+            font-size: var(--text-xs) !important;
+            font-weight: 600 !important;
+            width: auto !important;
+            min-width: 86px !important;
+        }
+        @media (hover: hover) {
+            [class*="st-key-alert_act_"] .stButton > button:hover,
+            [class*="st-key-alert_act_"] button:hover {
+                background-color: var(--color-success-low) !important;
+                border-color: var(--color-success-mid) !important;
+                color: var(--color-success) !important;
+            }
+            [class*="st-key-alert_act_"] button:hover * {
+                color: var(--color-success) !important;
             }
         }
 

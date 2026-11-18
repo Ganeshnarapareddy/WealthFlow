@@ -491,37 +491,62 @@ if page == "Dashboard":
     else:
         empty_state("No credit cards yet", "Add your first card in Credit Cards to track utilization here.", icon="wallet")
 
-    # Smart Alerts Section (pre-consolidated in bulk bundle — zero N+1 queries)
+    # Smart Alerts Section (pre-consolidated in bulk bundle — sleek compact rows)
     section_header("Upcoming dues & alerts", "Renewals, EMIs, loans, and bills due within 30 days")
     all_alerts = dash["all_alerts"]
 
-    with st.container(height=400):
+    with st.container(height=360 if len(all_alerts) > 4 else None):
         if not all_alerts:
             st.success("All clear! No alerts for the next 30 days.")
         else:
             for a in all_alerts:
-                days = a['days']
-                amt_fmt = fmt(a['amount'])
+                days = int(a['days'])
+                amt_fmt = _html.escape(fmt(a['amount']))
                 cat = a['category']
-                
-                # Use a single column for better visibility of buttons on mobile/small screens
-                msg = f"{a['icon']} **{a['name']}** "
-                dt = f"`{a['date']}`"
-                
-                c1, c2 = st.columns([0.75, 0.25])
+                name_esc = _html.escape(str(a['name']))
+                date_esc = _html.escape(str(a['date']))
+                cat_esc = _html.escape(str(cat))
+
+                if days <= 0:
+                    tone = "danger"
+                    due_txt = "Due today"
+                elif days <= 2:
+                    tone = "danger"
+                    due_txt = f"Due in {days}d"
+                elif days <= 5:
+                    tone = "warning"
+                    due_txt = f"In {days}d"
+                elif days <= 7:
+                    tone = "accent"
+                    due_txt = f"In {days}d"
+                else:
+                    tone = "muted"
+                    due_txt = f"In {days}d"
+
+                c1, c2 = st.columns([0.84, 0.16], vertical_alignment="center")
                 with c1:
-                    if days <= 2:
-                        st.error(f"🔴 {msg} — **DUE SOON** {dt}! ({amt_fmt})")
-                    elif days <= 5:
-                        st.warning(f"🟠 {msg} — in **{days} days** {dt} ({amt_fmt})")
-                    elif days <= 7:
-                        st.info(f"🟢 {msg} — in **{days} days** {dt} ({amt_fmt})")
-                    else:
-                        st.write(f"📅 {msg} — in **{days} days** {dt} ({amt_fmt})")
-                
+                    st.markdown(
+                        f"""
+                        <div class="wf-alert-row tone-{tone}">
+                            <div class="wf-alert-main">
+                                <div class="wf-alert-title">
+                                    <span>{name_esc}</span>
+                                    <span class="wf-alert-cat">{cat_esc}</span>
+                                </div>
+                                <div class="wf-alert-meta">
+                                    <span class="wf-alert-due tone-{tone}">{due_txt}</span>
+                                    <span>{date_esc}</span>
+                                </div>
+                            </div>
+                            <div class="wf-alert-amt">{amt_fmt}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
                 with c2:
                     if cat == 'Subscription':
-                        if st.button("Paid", key=f"btn_sub_{a['id']}", use_container_width=True):
+                        if st.button("Paid", icon=":material/check:", key=f"alert_act_sub_{a['id']}"):
                             FinanceService.mark_alert_actioned(a['id'], uid)
                             FinanceService.add_transaction(
                                 amount=a['amount'],
@@ -533,22 +558,21 @@ if page == "Dashboard":
                             )
                             st.rerun()
                     elif cat == 'EMI':
-                        if st.button("Paid", key=f"btn_cc_emi_{a['id']}", use_container_width=True):
+                        if st.button("Paid", icon=":material/check:", key=f"alert_act_cc_emi_{a['id']}"):
                             CreditCardService.mark_emi_paid(a['id'])
                             st.rerun()
                     elif cat == 'Loan':
                         btn_label = "Received" if "Given" in a['name'] else "Paid"
-                        if st.button(btn_label, key=f"btn_loan_{a['id']}", use_container_width=True):
+                        if st.button(btn_label, icon=":material/check:", key=f"alert_act_loan_{a['id']}"):
                             if a.get('is_emi'):
                                 LoanService.toggle_payment_status(a['id'], "pending")
                             else:
                                 LoanService.update_loan_status(a['id'], 'paid')
                             st.rerun()
                     elif cat == 'Bill':
-                        if st.button("Paid", key=f"btn_cc_bill_{a['id']}", use_container_width=True):
+                        if st.button("Paid", icon=":material/check:", key=f"alert_act_cc_bill_{a['id']}"):
                             CreditCardService.add_transaction(uid, a['id'], a['amount'], f"Bill Payment: {a['name']}", "payment", sync_bank=True)
                             st.rerun()
-            st.divider()
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -980,7 +1004,7 @@ elif page == "Transactions":
         cat_opts = {f"{r['icon']} {r['name']}": r['id'] for _, r in filtered.iterrows()}
 
         with st.form(f"add_txn_pro_{v}"):
-            amt = st.number_input("Amount", min_value=0.0, step=1.0, value=0.0, key=f"txn_amt_{v}")
+            amt = st.number_input("Amount", min_value=0.01, step=1.0, value=None, placeholder="0.00", key=f"txn_amt_{v}")
             dt = st.date_input("Date", value=datetime.now().date(), key=f"txn_dt_{v}")
             cat_sel = st.selectbox("Category", list(cat_opts.keys()) if cat_opts else ["-"], index=0, key=f"txn_cat_{v}")
             desc = st.text_input("Description", value="", placeholder="What was this for?", key=f"txn_desc_{v}")
@@ -2060,9 +2084,10 @@ elif page == "TripFlow":
                         )
                         exp_amt = st.number_input(
                             "Amount *",
-                            min_value=0.0,
+                            min_value=0.01,
                             step=1.0,
-                            value=0.0,
+                            value=None,
+                            placeholder="0.00",
                             key=f"te_amt_{trip_id}_{ev}",
                         )
                         exp_date = st.date_input(
@@ -2148,9 +2173,10 @@ elif page == "TripFlow":
                         )
                         adv_amt = st.number_input(
                             "Advance Amount *",
-                            min_value=0.0,
+                            min_value=0.01,
                             step=100.0,
-                            value=0.0,
+                            value=None,
+                            placeholder="0.00",
                             key=f"ta_amt_{trip_id}_{av}",
                         )
                         adv_desc = st.text_input(
