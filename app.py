@@ -100,12 +100,7 @@ st.set_page_config(
 if LOGO_B64:
     st.markdown(f'<link rel="apple-touch-icon" href="{LOGO_B64}">', unsafe_allow_html=True)
 
-# --- GLOBAL STYLES ---
-st.markdown("""<style>
-    .main .block-container {
-        padding-top: 1.5rem !important;
-    }
-</style>""", unsafe_allow_html=True)
+# --- GLOBAL STYLES — handled by components/styles.py token system ---
 
 # --- AUTHENTICATION ---
 def login_page():
