@@ -2,29 +2,74 @@ import pandas as pd
 import uuid
 import calendar
 from datetime import datetime, timedelta
+import streamlit as st
 from database import db
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_cards(user_id: str, v: int):
+    res = db.execute(
+        "SELECT id, name, bank, card_limit, billing_date, closing_date, current_balance "
+        "FROM credit_cards WHERE user_id = ? ORDER BY name", (user_id,)
+    )
+    cols = ["id", "name", "bank", "card_limit", "billing_date", "closing_date", "current_balance"]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_card_txns(card_id: str, year, month, v: int):
+    query = "SELECT id, date, description, amount, txn_type FROM credit_card_transactions WHERE card_id = ?"
+    params = [card_id]
+    if year and year != "All" and month and month != "All":
+        query += " AND date LIKE ?"
+        params.append(f"{year}-{int(month):02d}%")
+    elif year and year != "All":
+        query += " AND date LIKE ?"
+        params.append(f"{year}%")
+    query += " ORDER BY date DESC LIMIT 50"
+    res = db.execute(query, tuple(params))
+    cols = ["id", "date", "description", "amount", "txn_type"]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_card_emis(card_id: str, v: int):
+    res = db.execute("""
+        SELECT e.id, e.description, e.total_amount, e.monthly_amount, e.tenure, e.start_date,
+               (SELECT COUNT(*) FROM credit_card_emi_payments WHERE emi_id = e.id AND status = 'pending') as remaining_tenure
+        FROM credit_card_emis e
+        WHERE e.card_id = ? AND e.status = 'active'
+    """, (card_id,))
+    cols = ["id", "Description", "Total", "Monthly", "Tenure", "Start", "Remaining"]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_emi_payments(emi_id: str, v: int):
+    res = db.execute(
+        "SELECT id, due_date, amount, status, paid_date FROM credit_card_emi_payments "
+        "WHERE emi_id = ? ORDER BY due_date ASC", (emi_id,)
+    )
+    cols = ["id", "Date", "Amount", "Status", "Paid Date"]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
+
+
 class CreditCardService:
-    # v1.1 - Added due_date to upcoming bills
+    # v1.2 - Cached reads + batched EMI schedule creation
     """Manage credit cards and their transactions."""
 
     @staticmethod
     def get_cards(user_id):
         """Get all credit cards for a user."""
-        res = db.execute(
-            "SELECT id, name, bank, card_limit, billing_date, closing_date, current_balance "
-            "FROM credit_cards WHERE user_id = ? ORDER BY name", (user_id,)
-        )
-        if res and res.rows:
-            return pd.DataFrame(res.rows, columns=[
-                "id", "name", "bank", "card_limit", "billing_date",
-                "closing_date", "current_balance"
-            ])
-        return pd.DataFrame(columns=[
-            "id", "name", "bank", "card_limit", "billing_date",
-            "closing_date", "current_balance"
-        ])
+        return _cached_cards(user_id, db.version)
 
     @staticmethod
     def get_card_by_id(card_id):
@@ -105,19 +150,7 @@ class CreditCardService:
 
     @staticmethod
     def get_card_transactions(card_id, year=None, month=None):
-        query = "SELECT id, date, description, amount, txn_type FROM credit_card_transactions WHERE card_id = ?"
-        params = [card_id]
-        if year and year != "All" and month and month != "All":
-            query += " AND date LIKE ?"
-            params.append(f"{year}-{month:02d}%")
-        elif year and year != "All":
-            query += " AND date LIKE ?"
-            params.append(f"{year}%")
-        query += " ORDER BY date DESC LIMIT 50"
-        res = db.execute(query, tuple(params))
-        if res and res.rows:
-            return pd.DataFrame(res.rows, columns=["id", "date", "description", "amount", "txn_type"])
-        return pd.DataFrame(columns=["id", "date", "description", "amount", "txn_type"])
+        return _cached_card_txns(card_id, year, month, db.version)
 
     @staticmethod
     def get_total_outstanding(user_id):
@@ -154,32 +187,25 @@ class CreditCardService:
     @staticmethod
     def add_emi(user_id, card_id, description, total_amount, monthly_amount, tenure, start_date):
         eid = str(uuid.uuid4())
-        db.execute(
+        stmts = [(
             "INSERT INTO credit_card_emis (id, user_id, card_id, description, total_amount, monthly_amount, tenure, start_date, status) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (eid, user_id, card_id, description, total_amount, monthly_amount, tenure, start_date, 'active')
-        )
+            (eid, user_id, card_id, description, total_amount, monthly_amount, tenure, start_date, 'active'),
+        )]
         st_date = datetime.strptime(start_date, "%Y-%m-%d")
         for i in range(tenure):
             y = st_date.year + (st_date.month + i - 1) // 12
             m = (st_date.month + i - 1) % 12 + 1
             d = min(st_date.day, calendar.monthrange(y, m)[1])
-            db.execute(
+            stmts.append((
                 "INSERT INTO credit_card_emi_payments (id, emi_id, due_date, amount, status) VALUES (?, ?, ?, ?, ?)",
-                (str(uuid.uuid4()), eid, f"{y}-{m:02d}-{d:02d}", monthly_amount, 'pending')
-            )
+                (str(uuid.uuid4()), eid, f"{y}-{m:02d}-{d:02d}", monthly_amount, 'pending'),
+            ))
+        db.batch(stmts)
 
     @staticmethod
     def get_card_emis(card_id):
-        res = db.execute("""
-            SELECT e.id, e.description, e.total_amount, e.monthly_amount, e.tenure, e.start_date,
-                   (SELECT COUNT(*) FROM credit_card_emi_payments WHERE emi_id = e.id AND status = 'pending') as remaining_tenure
-            FROM credit_card_emis e 
-            WHERE e.card_id = ? AND e.status = 'active'
-        """, (card_id,))
-        if res and res.rows:
-            return pd.DataFrame(res.rows, columns=["id", "Description", "Total", "Monthly", "Tenure", "Start", "Remaining"])
-        return pd.DataFrame(columns=["id", "Description", "Total", "Monthly", "Tenure", "Start", "Remaining"])
+        return _cached_card_emis(card_id, db.version)
 
     @staticmethod
     def get_all_active_emis(user_id):
@@ -283,10 +309,4 @@ class CreditCardService:
     @staticmethod
     def get_emi_payments(emi_id):
         """Get all payments for a specific EMI."""
-        res = db.execute(
-            "SELECT id, due_date, amount, status, paid_date FROM credit_card_emi_payments "
-            "WHERE emi_id = ? ORDER BY due_date ASC", (emi_id,)
-        )
-        if res and res.rows:
-            return pd.DataFrame(res.rows, columns=["id", "Date", "Amount", "Status", "Paid Date"])
-        return pd.DataFrame(columns=["id", "Date", "Amount", "Status", "Paid Date"])
+        return _cached_emi_payments(emi_id, db.version)

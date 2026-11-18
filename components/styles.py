@@ -341,6 +341,34 @@ def apply_styles():
             white-space: nowrap;
         }
 
+        .wf-topbar-crumb-btn {
+            appearance: none;
+            background-color: var(--color-transparent);
+            border: 1px solid var(--color-transparent);
+            border-radius: var(--radius-sm);
+            padding: 4px 8px;
+            margin-left: -8px;
+            font-family: var(--font-body);
+            cursor: pointer;
+            transition:
+                background-color var(--dur-micro) var(--ease-out),
+                border-color var(--dur-micro) var(--ease-out),
+                color var(--dur-micro) var(--ease-out);
+        }
+
+        @media (hover: hover) {
+            .wf-topbar-crumb-btn:hover {
+                background-color: var(--color-paper-2);
+                border-color: var(--color-rule);
+                color: var(--color-ink);
+            }
+        }
+
+        .wf-topbar-crumb-btn:focus-visible {
+            outline: 2px solid var(--color-focus);
+            outline-offset: 2px;
+        }
+
         .wf-topbar-sep {
             color: var(--color-ink-3);
             opacity: 0.45;
@@ -649,13 +677,17 @@ def apply_styles():
                 opacity: 0;
             }
 
-            /* Offset main workspace ONLY when the sidebar rail is mounted (zero reflow on hover, centered login) */
+            /* Offset main workspace ONLY when the sidebar rail is mounted (zero horizontal overflow) */
             [data-testid="stAppViewContainer"]:has([data-testid="stSidebar"]) [data-testid="stMain"] {
                 margin-left: var(--rail-collapsed) !important;
+                width: calc(100% - var(--rail-collapsed)) !important;
+                max-width: calc(100% - var(--rail-collapsed)) !important;
             }
 
             body.wf-rail-pinned [data-testid="stAppViewContainer"]:has([data-testid="stSidebar"]) [data-testid="stMain"] {
                 margin-left: var(--rail-expanded) !important;
+                width: calc(100% - var(--rail-expanded)) !important;
+                max-width: calc(100% - var(--rail-expanded)) !important;
             }
 
             body.wf-rail-pinned [data-testid="stSidebar"] {
@@ -706,6 +738,26 @@ def apply_styles():
             padding: var(--space-xs) var(--space-xs) var(--space-md) 10px;
             margin-bottom: var(--space-xs);
             border-bottom: 1px solid var(--color-rule);
+        }
+
+        .wf-rail-brand-home {
+            appearance: none;
+            background: var(--color-transparent);
+            border: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            text-align: left;
+            cursor: pointer;
+            min-width: 0;
+            border-radius: var(--radius-md);
+        }
+
+        .wf-rail-brand-home:focus-visible {
+            outline: 2px solid var(--color-focus);
+            outline-offset: 2px;
         }
 
         .wf-rail-logo {
@@ -1090,14 +1142,14 @@ def apply_styles():
         }
 
         /* ============================================================
-           8. SEGMENTED TABS (replaces thin underline with crisp pill rail)
+           8. SEGMENTED TABS & CONTROLS (crisp visual separation per pill)
         ============================================================ */
         [data-testid="stTabs"] [role="tablist"] {
             background-color: var(--color-paper-2);
             border: 1px solid var(--color-rule);
             border-radius: var(--radius-md);
-            padding: 4px;
-            gap: 4px;
+            padding: 6px !important;
+            gap: 8px !important;
             margin-bottom: var(--space-md);
             overflow-x: auto;
             scrollbar-width: none;
@@ -1110,21 +1162,22 @@ def apply_styles():
         [data-testid="stTabs"] button[role="tab"] {
             border-radius: var(--radius-sm) !important;
             padding: var(--space-xs) var(--space-md) !important;
-            height: 34px !important;
+            height: 36px !important;
             color: var(--color-ink-2) !important;
             font-family: var(--font-body) !important;
             font-size: var(--text-sm) !important;
             font-weight: 500 !important;
-            border: 1px solid var(--color-transparent) !important;
-            background-color: var(--color-transparent) !important;
+            border: 1px solid var(--color-rule-strong) !important;
+            background-color: var(--color-paper-3) !important;
             transition:
                 background-color var(--dur-micro) var(--ease-out),
+                border-color var(--dur-micro) var(--ease-out),
                 color var(--dur-micro) var(--ease-out) !important;
         }
 
         [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            background-color: var(--color-paper-4) !important;
-            border-color: var(--color-rule-strong) !important;
+            background-color: var(--color-accent-low) !important;
+            border-color: var(--color-accent-mid) !important;
             color: var(--color-ink) !important;
             font-weight: 600 !important;
         }
@@ -1132,7 +1185,8 @@ def apply_styles():
         @media (hover: hover) {
             [data-testid="stTabs"] button[role="tab"]:hover {
                 color: var(--color-ink) !important;
-                background-color: var(--color-paper-3) !important;
+                background-color: var(--color-paper-4) !important;
+                border-color: var(--color-field-edge) !important;
             }
         }
 
@@ -1145,6 +1199,71 @@ def apply_styles():
         [data-testid="stTabs"] [data-baseweb="tab-highlight"],
         [data-testid="stTabs"] [data-baseweb="tab-border"] {
             display: none !important;
+        }
+
+        /* State-persisted Segmented Control (TripFlow tabs — matching crisp pill rail) */
+        [data-testid="stSegmentedControl"] [role="radiogroup"],
+        [data-testid="stButtonGroup"] > div {
+            background-color: var(--color-paper-2) !important;
+            border: 1px solid var(--color-rule) !important;
+            border-radius: var(--radius-md) !important;
+            padding: 6px !important;
+            gap: 8px !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+        }
+
+        [data-testid="stSegmentedControl"] button,
+        [data-testid="stButtonGroup"] button {
+            border-radius: var(--radius-sm) !important;
+            border: 1px solid var(--color-rule-strong) !important;
+            background-color: var(--color-paper-3) !important;
+            color: var(--color-ink-2) !important;
+            font-family: var(--font-body) !important;
+            font-size: var(--text-sm) !important;
+            font-weight: 500 !important;
+            height: 36px !important;
+            padding: 0 var(--space-md) !important;
+            transition:
+                background-color var(--dur-micro) var(--ease-out),
+                border-color var(--dur-micro) var(--ease-out),
+                color var(--dur-micro) var(--ease-out) !important;
+        }
+
+        [data-testid="stSegmentedControl"] button[aria-checked="true"],
+        [data-testid="stButtonGroup"] button[kind="segmented_controlActive"],
+        [data-testid="stButtonGroup"] button[aria-pressed="true"] {
+            background-color: var(--color-accent-low) !important;
+            border-color: var(--color-accent-mid) !important;
+            color: var(--color-ink) !important;
+            font-weight: 600 !important;
+        }
+
+        @media (hover: hover) {
+            [data-testid="stSegmentedControl"] button:hover,
+            [data-testid="stButtonGroup"] button:hover {
+                background-color: var(--color-paper-4) !important;
+                border-color: var(--color-field-edge) !important;
+                color: var(--color-ink) !important;
+            }
+        }
+
+        /* Floating Toast Popups (positioned cleanly at top-right below topbar) */
+        [data-testid="stToastContainer"] {
+            top: 64px !important;
+            right: 24px !important;
+            bottom: auto !important;
+            z-index: var(--z-toast) !important;
+        }
+
+        [data-testid="stToast"] {
+            background-color: var(--color-paper-2) !important;
+            border: 1px solid var(--color-success-mid) !important;
+            border-left: 3px solid var(--color-success) !important;
+            border-radius: var(--radius-md) !important;
+            box-shadow: var(--shadow-float) !important;
+            color: var(--color-ink) !important;
+            font-family: var(--font-body) !important;
         }
 
         /* ============================================================
@@ -1238,12 +1357,19 @@ def apply_styles():
         }
 
         /* Primary CTA buttons & form submit buttons get the cobalt signal */
-        .stButton > button[kind="primary"],
-        [data-testid="stFormSubmitButton"] > button {
+        .stButton button[kind="primary"],
+        [data-testid="stFormSubmitButton"] button {
             background-color: var(--color-accent) !important;
             color: var(--color-accent-ink) !important;
             border-color: var(--color-transparent) !important;
             font-weight: 600 !important;
+        }
+
+        .stButton button[kind="primary"] *,
+        .stButton button[kind="primary"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stFormSubmitButton"] button *,
+        [data-testid="stFormSubmitButton"] button [data-testid="stMarkdownContainer"] p {
+            color: var(--color-accent-ink) !important;
         }
 
         @media (hover: hover) {

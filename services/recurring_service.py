@@ -1,7 +1,20 @@
 import pandas as pd
 import uuid
 from datetime import datetime, timedelta
+import streamlit as st
 from database import db
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_subscriptions(user_id: str, v: int):
+    res = db.execute(
+        "SELECT id, name, amount, billing_cycle, start_date, next_billing_date, category, icon "
+        "FROM subscriptions WHERE user_id = ? ORDER BY name", (user_id,)
+    )
+    cols = ["id", "Name", "Amount", "Cycle", "Start Date", "Next Date", "Category", "Icon"]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
 
 
 class RecurringService:
@@ -9,18 +22,7 @@ class RecurringService:
 
     @staticmethod
     def get_subscriptions(user_id):
-        res = db.execute(
-            "SELECT id, name, amount, billing_cycle, start_date, next_billing_date, category, icon "
-            "FROM subscriptions WHERE user_id = ? ORDER BY name", (user_id,)
-        )
-        if res and res.rows:
-            return pd.DataFrame(
-                res.rows,
-                columns=["id", "Name", "Amount", "Cycle", "Start Date", "Next Date", "Category", "Icon"],
-            )
-        return pd.DataFrame(
-            columns=["id", "Name", "Amount", "Cycle", "Start Date", "Next Date", "Category", "Icon"]
-        )
+        return _cached_subscriptions(user_id, db.version)
 
     @staticmethod
     def add_subscription(user_id, name, amount, cycle, bill_date, icon="💳", category="Subscriptions"):

@@ -2,7 +2,47 @@ import pandas as pd
 import uuid
 import calendar
 from datetime import datetime, timedelta, date
+import streamlit as st
 from database import db
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_loans(user_id: str, loan_type, v: int):
+    query = """
+        SELECT id, person_name, amount, loan_type, interest_rate,
+               start_date, due_date, emi_amount, emi_active,
+               tenure, emi_start_date,
+               status, remaining_amount, notes,
+               (SELECT COUNT(*) FROM loan_payments WHERE loan_id = loans.id AND status = 'pending') as remaining_tenure
+        FROM loans WHERE user_id = ?
+    """
+    params = [user_id]
+    if loan_type:
+        query += " AND loan_type = ?"
+        params.append(loan_type)
+    query += " ORDER BY due_date ASC"
+    res = db.execute(query, tuple(params))
+    cols = [
+        "id", "person_name", "amount", "loan_type", "interest_rate",
+        "start_date", "due_date", "emi_amount", "emi_active",
+        "tenure", "emi_start_date",
+        "status", "remaining_amount", "notes", "remaining_tenure"
+    ]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_loan_payments(loan_id: str, v: int):
+    res = db.execute(
+        "SELECT id, due_date, amount, status, paid_date FROM loan_payments WHERE loan_id = ? ORDER BY due_date ASC",
+        (loan_id,)
+    )
+    cols = ["id", "due_date", "amount", "status", "paid_date"]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
 
 
 class LoanService:
@@ -11,33 +51,7 @@ class LoanService:
     @staticmethod
     def get_loans(user_id, loan_type=None):
         """Get all loans for a user, optionally filtered by type."""
-        query = """
-            SELECT id, person_name, amount, loan_type, interest_rate,
-                   start_date, due_date, emi_amount, emi_active,
-                   tenure, emi_start_date,
-                   status, remaining_amount, notes,
-                   (SELECT COUNT(*) FROM loan_payments WHERE loan_id = loans.id AND status = 'pending') as remaining_tenure
-            FROM loans WHERE user_id = ?
-        """
-        params = [user_id]
-        if loan_type:
-            query += " AND loan_type = ?"
-            params.append(loan_type)
-        query += " ORDER BY due_date ASC"
-        res = db.execute(query, tuple(params))
-        if res and res.rows:
-            return pd.DataFrame(res.rows, columns=[
-                "id", "person_name", "amount", "loan_type", "interest_rate",
-                "start_date", "due_date", "emi_amount", "emi_active",
-                "tenure", "emi_start_date",
-                "status", "remaining_amount", "notes", "remaining_tenure"
-            ])
-        return pd.DataFrame(columns=[
-            "id", "person_name", "amount", "loan_type", "interest_rate",
-            "start_date", "due_date", "emi_amount", "emi_active",
-            "tenure", "emi_start_date",
-            "status", "remaining_amount", "notes", "remaining_tenure"
-        ])
+        return _cached_loans(user_id, loan_type, db.version)
     
     @staticmethod
     def get_active_emi_stats(user_id):
@@ -86,7 +100,8 @@ class LoanService:
 
     @staticmethod
     def _generate_schedule(loan_id, total_amount, emi_amount, emi_active, tenure, emi_start_date, due_date):
-        """Internal helper to create installment entries."""
+        """Internal helper to create installment entries in a single batch roundtrip."""
+        stmts = []
         if emi_active and tenure > 0:
             start_dt = datetime.strptime(emi_start_date, "%Y-%m-%d")
             for i in range(tenure):
@@ -95,27 +110,22 @@ class LoanService:
                 last_day = calendar.monthrange(year, month)[1]
                 day = min(start_dt.day, last_day)
                 inst_date = date(year, month, day).strftime("%Y-%m-%d")
-                
-                db.execute(
+                stmts.append((
                     "INSERT INTO loan_payments (id, loan_id, due_date, amount, status) VALUES (?, ?, ?, ?, 'pending')",
-                    (str(uuid.uuid4()), loan_id, inst_date, emi_amount)
-                )
+                    (str(uuid.uuid4()), loan_id, inst_date, emi_amount),
+                ))
         else:
-            db.execute(
+            stmts.append((
                 "INSERT INTO loan_payments (id, loan_id, due_date, amount, status) VALUES (?, ?, ?, ?, 'pending')",
-                (str(uuid.uuid4()), loan_id, due_date, total_amount)
-            )
+                (str(uuid.uuid4()), loan_id, due_date, total_amount),
+            ))
+        if stmts:
+            db.batch(stmts)
 
     @staticmethod
     def get_loan_payments(loan_id):
         """Get all payments/installments for a loan."""
-        res = db.execute(
-            "SELECT id, due_date, amount, status, paid_date FROM loan_payments WHERE loan_id = ? ORDER BY due_date ASC",
-            (loan_id,)
-        )
-        if res and res.rows:
-            return pd.DataFrame(res.rows, columns=["id", "due_date", "amount", "status", "paid_date"])
-        return pd.DataFrame(columns=["id", "due_date", "amount", "status", "paid_date"])
+        return _cached_loan_payments(loan_id, db.version)
 
     @staticmethod
     def toggle_payment_status(payment_id, current_status):

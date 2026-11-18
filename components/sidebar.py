@@ -67,7 +67,7 @@ def render_topbar(user_data, current_page_label: str, finance_service, auth_serv
         st.markdown(
             f"""
             <div class="wf-topbar-left wf-topbar-marker" role="banner">
-                <span class="wf-topbar-crumb">WealthFlow</span>
+                <button type="button" id="wf-crumb-home" class="wf-topbar-crumb wf-topbar-crumb-btn" title="Go to Dashboard" aria-label="Go to WealthFlow Dashboard">WealthFlow</button>
                 <span class="wf-topbar-sep" aria-hidden="true">/</span>
                 <span class="wf-topbar-page">{page_esc}</span>
             </div>
@@ -118,7 +118,7 @@ def render_topbar(user_data, current_page_label: str, finance_service, auth_serv
             )
             if sym_map[selected_label] != current_sym:
                 st.session_state["sym"] = sym_map[selected_label]
-                finance_service.update_setting(
+                finance_service.set_setting(
                     "currency_symbol", sym_map[selected_label], user_data["id"]
                 )
                 st.rerun()
@@ -450,6 +450,24 @@ def _mount_shell_controller(nav_entries, current_page_label: str):
                 }}
             }}
 
+            /* 5. Wire WealthFlow breadcrumb & sidebar brand to route directly to Dashboard */
+            function bindHomeLinks() {{
+                const crumb = doc.getElementById('wf-crumb-home');
+                if (crumb) {{
+                    crumb.onclick = function(e) {{
+                        e.preventDefault();
+                        win.__wf.clickPage('Dashboard');
+                    }};
+                }}
+                const railHome = doc.getElementById('wf-rail-home');
+                if (railHome) {{
+                    railHome.onclick = function(e) {{
+                        e.preventDefault();
+                        win.__wf.clickPage('Dashboard');
+                    }};
+                }}
+            }}
+
             if (!win.__wfPopObserver) {{
                 win.__wfPopObserver = new MutationObserver(function() {{
                     fixProfilePopover();
@@ -461,10 +479,12 @@ def _mount_shell_controller(nav_entries, current_page_label: str):
             ensureCommandPalette();
             ensureMobileBottomNav();
             fixProfilePopover();
+            bindHomeLinks();
             setTimeout(function() {{
                 applyPinState();
                 ensureCommandPalette();
                 fixProfilePopover();
+                bindHomeLinks();
             }}, 200);
         }})();
         </script>
@@ -503,11 +523,13 @@ def render_sidebar(user_data, logo_b64, finance_service, auth_service, cookies):
         st.markdown(
             f"""
             <div class="wf-rail-brand">
-                {logo_html}
-                <div class="wf-rail-text">
-                    <div class="wf-rail-title">WealthFlow</div>
-                    <div class="wf-rail-sub">{username} ({role})</div>
-                </div>
+                <button type="button" id="wf-rail-home" class="wf-rail-brand-home" title="Go to Dashboard" aria-label="Go to WealthFlow Dashboard">
+                    {logo_html}
+                    <div class="wf-rail-text">
+                        <div class="wf-rail-title">WealthFlow</div>
+                        <div class="wf-rail-sub">{username} ({role})</div>
+                    </div>
+                </button>
                 <button type="button" id="wf-pin-rail" class="wf-pin-btn wf-rail-text"
                         title="Pin rail open" aria-label="Pin navigation rail">
                     {_SVG_PIN_OUTLINE}

@@ -1,14 +1,21 @@
 import uuid
 import pandas as pd
+import streamlit as st
 from database import db
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_assets(user_id: str, v: int):
+    res = db.execute("SELECT id, name, type, value FROM assets WHERE user_id = ?", (user_id,))
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=['id', 'Name', 'Type', 'Value'])
+    return pd.DataFrame(columns=['id', 'Name', 'Type', 'Value'])
+
 
 class AssetService:
     @staticmethod
     def get_assets(user_id):
-        res = db.execute("SELECT id, name, type, value FROM assets WHERE user_id = ?", (user_id,))
-        if res and res.rows:
-            return pd.DataFrame(res.rows, columns=['id', 'Name', 'Type', 'Value'])
-        return pd.DataFrame(columns=['id', 'Name', 'Type', 'Value'])
+        return _cached_assets(user_id, db.version)
 
     @staticmethod
     def add_asset(name, asset_type, value, user_id):

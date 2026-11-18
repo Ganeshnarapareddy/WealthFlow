@@ -1,6 +1,18 @@
 import uuid
 import pandas as pd
+import streamlit as st
 from database import db
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_goals(user_id: str, v: int):
+    res = db.execute(
+        "SELECT id, name, target_amount, current_amount, deadline, icon FROM goals WHERE user_id = ?", (user_id,)
+    )
+    cols = ["id", "Name", "Target", "Current", "Deadline", "Icon"]
+    if res and res.rows:
+        return pd.DataFrame(res.rows, columns=cols)
+    return pd.DataFrame(columns=cols)
 
 
 class GoalService:
@@ -8,16 +20,7 @@ class GoalService:
 
     @staticmethod
     def get_goals(user_id):
-        res = db.execute(
-            "SELECT id, name, target_amount, current_amount, deadline, icon FROM goals WHERE user_id = ?", (user_id,)
-        )
-        if res and res.rows:
-            return pd.DataFrame(
-                res.rows, columns=["id", "Name", "Target", "Current", "Deadline", "Icon"]
-            )
-        return pd.DataFrame(
-            columns=["id", "Name", "Target", "Current", "Deadline", "Icon"]
-        )
+        return _cached_goals(user_id, db.version)
 
     @staticmethod
     def add_goal(user_id, name, target, deadline, icon="🎯"):

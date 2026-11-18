@@ -7,10 +7,24 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from collections import namedtuple
+
+_WRITE_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
+_MockRes = namedtuple('MockRes', ['rows'])
+
+
+def _is_write_query(query: str) -> bool:
+    if not query:
+        return False
+    first = query.lstrip().split(None, 1)
+    return bool(first and first[0].upper() in _WRITE_PREFIXES)
+
+
 class TursoManager:
-    """Robust Turso database manager with clean schema management."""
+    """Robust Turso database manager with bulk batch execution and cache versioning."""
     
     def __init__(self):
+        self.version = 0
         try:
             raw_url = st.secrets["TURSO_URL"]
             # Ensure URL is clean and uses https for the sync client
@@ -28,21 +42,60 @@ class TursoManager:
             st.error(f"Database Connection Error: {e}")
             raise e
 
+    def bump_version(self):
+        """Increment monotonic data version so cached reads refresh immediately after any write."""
+        self.version += 1
+
     def execute(self, query: str, params: tuple = ()):
         """Execute a query with defensive error handling for the protocol."""
         try:
-            return self.client.execute(query, params)
+            res = self.client.execute(query, params)
+            if _is_write_query(query):
+                self.version += 1
+            return res
         except KeyError as e:
             if str(e) == "'result'":
                 logger.error(f"Protocol Error (KeyError: 'result') on query: {query}")
-                # Return an empty result structure to prevent downstream crashes
-                from collections import namedtuple
-                MockRes = namedtuple('MockRes', ['rows'])
-                return MockRes(rows=[])
+                return _MockRes(rows=[])
             raise e
         except Exception as e:
             logger.error(f"Database Error: {e} on query: {query}")
             raise e
+
+    def batch(self, statements):
+        """Execute multiple SQL statements in a single Turso HTTP roundtrip.
+        Each item may be a SQL string, a (sql, params) tuple, or a libsql_client.Statement.
+        """
+        if not statements:
+            return []
+        libsql_stmts = []
+        has_write = False
+        for item in statements:
+            if isinstance(item, libsql_client.Statement):
+                libsql_stmts.append(item)
+                if _is_write_query(item.sql):
+                    has_write = True
+            elif isinstance(item, (tuple, list)):
+                sql = item[0]
+                params = item[1] if len(item) > 1 and item[1] is not None else ()
+                libsql_stmts.append(libsql_client.Statement(sql, params))
+                if _is_write_query(sql):
+                    has_write = True
+            else:
+                libsql_stmts.append(libsql_client.Statement(str(item)))
+                if _is_write_query(str(item)):
+                    has_write = True
+        try:
+            results = self.client.batch(libsql_stmts)
+            if has_write:
+                self.version += 1
+            return results
+        except Exception as e:
+            logger.warning(f"Batch execution failed ({e}); falling back to sequential execution.")
+            results = []
+            for st_obj in libsql_stmts:
+                results.append(self.execute(st_obj.sql, st_obj.args or ()))
+            return results
 
     def table_exists(self, table_name):
         """Check if a table exists in the database."""
@@ -146,38 +199,19 @@ class TursoManager:
                 to_name TEXT, amount REAL, settled_at TEXT)"""
         ]
         
-        for q in ddl:
-            try:
-                self.execute(q)
-            except Exception as e:
-                logger.error(f"Failed to create table with query: {q} | Error: {e}")
-                # We don't raise here to allow other tables to be created if one fails
-            
-        # Migration for CC linking
-        try: self.execute("ALTER TABLE credit_card_transactions ADD COLUMN linked_txn_id TEXT")
-        except: pass
-        
-        # Migration for tenure and emi_start_date in loans
-        try: self.execute("ALTER TABLE loans ADD COLUMN tenure INTEGER DEFAULT 0")
-        except: pass
-        try: self.execute("ALTER TABLE loans ADD COLUMN emi_start_date TEXT")
-        except: pass
-            
-        # Robust check and creation for user_sessions (Multi-device support)
-        if not self.table_exists("user_sessions"):
-            logger.info("Force creating missing table: user_sessions")
-            try:
-                self.execute("""CREATE TABLE user_sessions (
-                    id TEXT PRIMARY KEY, user_id TEXT, token TEXT UNIQUE,
-                    expiry TEXT, created_at TEXT)""")
-                logger.info("user_sessions table created successfully.")
-            except Exception as e:
-                logger.error(f"Failed to create user_sessions: {e}")
-        else:
-            logger.info("user_sessions table already exists.")
+        # Batch all CREATE TABLE IF NOT EXISTS statements in one roundtrip
+        try:
+            self.batch(ddl)
+        except Exception:
+            for q in ddl:
+                try:
+                    self.execute(q)
+                except Exception as e:
+                    logger.error(f"Failed to create table with query: {q} | Error: {e}")
 
-        # Seed Categories only if table is empty
+        # Seed categories + normalize core category IDs + default settings in bulk
         res = self.execute("SELECT COUNT(*) FROM categories")
+        seed_stmts = []
         if res and res.rows and res.rows[0][0] == 0:
             cats = [
                 ("1", "Food", "Expense", "🍱"), ("2", "Transport", "Expense", "🚗"),
@@ -192,98 +226,94 @@ class TursoManager:
                 ("16", "Subscription Payments", "Expense", "🔄")
             ]
             for c in cats:
-                self.execute("INSERT OR IGNORE INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)", c)
-        
-        # Force rename/update categories to match user requirements exactly
-        # Ensure Subscriptions is ID 8, EMI Payment is 14, Loan Payment is 15
-        self.execute("UPDATE categories SET name = 'Subscriptions', icon = '📺' WHERE id = '8'")
-        self.execute("INSERT OR IGNORE INTO categories (id, name, type, icon) VALUES ('14', 'EMI Payment', 'Expense', '💳')")
-        self.execute("UPDATE categories SET name = 'EMI Payment', icon = '💳' WHERE id = '14'")
-        self.execute("INSERT OR IGNORE INTO categories (id, name, type, icon) VALUES ('15', 'Loan Payment', 'Expense', '🏦')")
-        self.execute("UPDATE categories SET name = 'Loan Payment', icon = '🏦' WHERE id = '15'")
+                seed_stmts.append(("INSERT OR IGNORE INTO categories (id, name, type, icon) VALUES (?, ?, ?, ?)", c))
 
-        # Seed default settings
-        self.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('fiscal_month_start_day', '1')")
+        seed_stmts.extend([
+            ("UPDATE categories SET name = 'Subscriptions', icon = '📺' WHERE id = '8'", ()),
+            ("INSERT OR IGNORE INTO categories (id, name, type, icon) VALUES ('14', 'EMI Payment', 'Expense', '💳')", ()),
+            ("UPDATE categories SET name = 'EMI Payment', icon = '💳' WHERE id = '14'", ()),
+            ("INSERT OR IGNORE INTO categories (id, name, type, icon) VALUES ('15', 'Loan Payment', 'Expense', '🏦')", ()),
+            ("UPDATE categories SET name = 'Loan Payment', icon = '🏦' WHERE id = '15'", ()),
+            ("INSERT OR IGNORE INTO settings (key, user_id, value) VALUES ('fiscal_month_start_day', 'admin', '1')", ()),
+        ])
+        self.batch(seed_stmts)
 
-        # 1. Column Migrations
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN password_hash TEXT")
-        except: pass
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN role TEXT DEFAULT 'user'")
-        except: pass
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN email TEXT")
-        except: pass
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN currency TEXT DEFAULT 'USD'")
-        except: pass
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN phone TEXT")
-        except: pass
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN short_id INTEGER")
-        except: pass
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN status TEXT DEFAULT 'active'")
-        except: pass
-        try: self.execute("ALTER TABLE wf_users ADD COLUMN deleted_at TEXT")
-        except: pass
-
-        # 1. Add user_id column to ALL tables if missing
-        all_app_tables = [
-            'transactions', 'credit_card_transactions', 'budgets', 'subscriptions', 
-            'goals', 'loans', 'credit_cards', 'assets', 'credit_card_emis', 
-            'credit_card_emi_payments', 'settings', 'actioned_alerts', 'categories'
+        # Fast schema inspection in a single batch (only runs ALTER TABLE if a column is genuinely missing)
+        inspect_tables = [
+            'credit_card_transactions', 'loans', 'wf_users', 'transactions',
+            'budgets', 'subscriptions', 'goals', 'credit_cards', 'assets',
+            'credit_card_emis', 'credit_card_emi_payments', 'settings',
+            'actioned_alerts', 'categories'
         ]
-        for table in all_app_tables:
-            try: self.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
-            except: pass
+        pragma_results = self.batch([f"PRAGMA table_info({t})" for t in inspect_tables])
+        table_cols = {}
+        for t, r in zip(inspect_tables, pragma_results):
+            table_cols[t] = {row[1] for row in r.rows} if (r and r.rows) else set()
 
-        # Ensure settings has the correct primary key for per-user settings
-        try:
-            self.execute("CREATE TABLE IF NOT EXISTS settings_new (key TEXT, user_id TEXT, value TEXT, PRIMARY KEY (key, user_id))")
-            self.execute("INSERT OR IGNORE INTO settings_new SELECT key, user_id, value FROM settings")
-            self.execute("DROP TABLE settings")
-            self.execute("ALTER TABLE settings_new RENAME TO settings")
-        except: pass
+        alter_stmts = []
+        if 'linked_txn_id' not in table_cols['credit_card_transactions']:
+            alter_stmts.append("ALTER TABLE credit_card_transactions ADD COLUMN linked_txn_id TEXT")
+        if 'tenure' not in table_cols['loans']:
+            alter_stmts.append("ALTER TABLE loans ADD COLUMN tenure INTEGER DEFAULT 0")
+        if 'emi_start_date' not in table_cols['loans']:
+            alter_stmts.append("ALTER TABLE loans ADD COLUMN emi_start_date TEXT")
 
-        # 2. Ensure default admin user exists (Initial setup only)
+        user_cols_needed = [
+            ('password_hash', 'TEXT'), ('role', "TEXT DEFAULT 'user'"), ('email', 'TEXT'),
+            ('currency', "TEXT DEFAULT 'USD'"), ('phone', 'TEXT'), ('short_id', 'INTEGER'),
+            ('status', "TEXT DEFAULT 'active'"), ('deleted_at', 'TEXT'),
+        ]
+        for col, col_def in user_cols_needed:
+            if col not in table_cols['wf_users']:
+                alter_stmts.append(f"ALTER TABLE wf_users ADD COLUMN {col} {col_def}")
+
+        for table in [
+            'transactions', 'credit_card_transactions', 'budgets', 'subscriptions',
+            'goals', 'loans', 'credit_cards', 'assets', 'credit_card_emis',
+            'credit_card_emi_payments', 'settings', 'actioned_alerts', 'categories'
+        ]:
+            if 'user_id' not in table_cols[table]:
+                alter_stmts.append(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
+
+        if alter_stmts:
+            for stmt in alter_stmts:
+                try:
+                    self.execute(stmt)
+                except Exception:
+                    pass
+
+        # Ensure default admin user & default admin account exist (single batch check)
         try:
-            res = self.execute("SELECT id FROM wf_users WHERE username = 'admin'")
-            if not res or not res.rows:
+            chk_res = self.batch([
+                ("SELECT id FROM wf_users WHERE role = 'admin' OR id = 'admin' OR username = 'admin' LIMIT 1", ()),
+                ("SELECT COUNT(*) FROM accounts", ()),
+            ])
+            admin_id = chk_res[0].rows[0][0] if (chk_res[0] and chk_res[0].rows) else None
+            setup_stmts = []
+            if not admin_id:
                 import hashlib
                 SALT = "wealthflow_secure_2026"
                 admin_pass_hash = hashlib.sha256(("admin123" + SALT).encode()).hexdigest()
                 now = datetime.now().strftime("%Y-%m-%d %H:%M")
-                self.execute(
-                    "INSERT INTO wf_users (id, username, password_hash, role, created_at, currency, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
+                admin_id = "admin"
+                setup_stmts.append((
+                    "INSERT OR IGNORE INTO wf_users (id, username, password_hash, role, created_at, currency, status) VALUES (?, ?, ?, ?, ?, ?, 'active')",
                     ("admin", "admin", admin_pass_hash, "admin", now, "INR")
-                )
-        except Exception as e:
-            logger.warning(f"Note: Could not ensure default admin user: {e}")
-
-        # 3. Assign existing data to 'admin'
-        try:
-            all_tables = [
-                'accounts', 'transactions', 'credit_card_transactions', 'assets', 
-                'loans', 'budgets', 'subscriptions', 'goals', 'credit_cards', 
-                'credit_card_emis', 'credit_card_emi_payments', 'settings', 'actioned_alerts'
-            ]
-            for table in all_tables:
-                try: self.execute(f"UPDATE {table} SET user_id = 'admin' WHERE user_id IS NULL OR user_id = 'default_user'")
-                except: pass
-        except Exception as e:
-            logger.warning(f"Note: Could not migrate legacy data: {e}")
-
-        # Ensure default account for admin
-        try:
-            res = self.execute("SELECT COUNT(*) FROM accounts WHERE user_id = 'admin'")
-            if res and res.rows[0][0] == 0:
-                self.execute(
+                ))
+            if not (chk_res[1] and chk_res[1].rows and chk_res[1].rows[0][0] > 0):
+                setup_stmts.append((
                     "INSERT OR IGNORE INTO accounts (id, user_id, account_name, balance, account_type) VALUES (?, ?, ?, ?, ?)",
-                    ("default_account_admin", "admin", "Main Account", 0.0, "Savings")
-                )
+                    ("default_account_admin", admin_id, "Main Account", 0.0, "Savings")
+                ))
+            if setup_stmts:
+                self.batch(setup_stmts)
         except Exception as e:
-            logger.warning(f"Note: Could not create default admin account (may already exist): {e}")
+            logger.warning(f"Note: Could not ensure default admin user/account: {e}")
 
 @st.cache_resource
-def get_db_instance(v=3):
+def get_db_instance(v=5):
     manager = TursoManager()
     manager.initialize_schema()
     return manager
 
-db = get_db_instance(v=4)
+db = get_db_instance(v=5)
