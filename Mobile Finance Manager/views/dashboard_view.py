@@ -158,7 +158,7 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
             tone = "danger" if days <= 2 else ("warning" if days <= 5 else ("accent" if days <= 7 else "neutral"))
             due_txt = "Due today" if days <= 0 else f"In {days}d"
 
-            c1, c2 = st.columns([0.74, 0.26], vertical_alignment="center")
+            c1, c2 = st.columns([0.68, 0.32], vertical_alignment="center")
             with c1:
                 st.markdown(
                     f"""
@@ -192,7 +192,7 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
                         st.session_state["m_toast"] = "EMI payment recorded!"
                         st.rerun()
                 elif cat == "Loan":
-                    lbl = "Recv" if "Given" in a["name"] else "Paid"
+                    lbl = "Receive" if "Given" in a["name"] else "Paid"
                     if st.button(lbl, icon=":material/check:", key=f"m_alert_loan_{a['id']}"):
                         if a.get("is_emi"):
                             loan_service.toggle_payment_status(a["id"], "pending")

@@ -330,30 +330,127 @@ def render_settings_mobile(uid: str, user_data: dict, finance_service, auth_serv
         u_email = st.text_input("Email", value=user_data.get("email", "") or "")
         u_phone = st.text_input("Phone", value=user_data.get("phone", "") or "")
         if st.form_submit_button("Update Profile", type="primary", use_container_width=True):
-            ok, msg = auth_service.update_profile(uid, u_name.strip(), u_email.strip(), u_phone.strip())
-            if ok:
+            res = auth_service.update_profile(uid, u_name.strip(), u_email.strip(), u_phone.strip())
+            if res is True:
                 st.session_state.user["username"] = u_name.strip()
                 st.session_state.user["email"] = u_email.strip()
                 st.session_state.user["phone"] = u_phone.strip()
                 st.session_state["m_toast"] = "Profile updated!"
                 st.rerun()
             else:
-                st.error(msg)
+                st.error(str(res))
 
 
 def render_admin_mobile(auth_service):
+    with st.expander("Create new user", icon=":material/person_add:"):
+        with st.form("m_admin_new_user", clear_on_submit=True):
+            new_u = st.text_input("Username *", placeholder="Choose username")
+            new_p = st.text_input("Password *", type="password", placeholder="At least 6 characters")
+            new_e = st.text_input("Email", placeholder="you@example.com")
+            new_ph = st.text_input("Phone", placeholder="+91...")
+            new_r = st.selectbox("Role", ["user", "admin"])
+            if st.form_submit_button("Create User", type="primary", use_container_width=True):
+                if not new_u.strip():
+                    st.error("Username is required.")
+                elif not new_p or len(new_p) < 6:
+                    st.error("Password must be at least 6 characters.")
+                elif not new_e.strip() and not new_ph.strip():
+                    st.error("Email or Phone is mandatory.")
+                else:
+                    uid_res = auth_service.signup(new_u.strip(), new_p, new_e.strip(), new_ph.strip(), role=new_r)
+                    if isinstance(uid_res, str) and len(uid_res) == 36 and "-" in uid_res:
+                        st.session_state["m_toast"] = f"User '{new_u.strip()}' created!"
+                        st.rerun()
+                    else:
+                        st.error(str(uid_res))
+
     users = auth_service.get_all_users()
     if not users:
         m_empty("No users found", "User accounts appear here.")
         return
+
+    active_cnt = sum(1 for u in users if len(u) > 6 and str(u[6]).lower() == "active")
+    arch_cnt = len(users) - active_cnt
+    m_kpi_strip([
+        {"label": "Total Accounts", "value": str(len(users))},
+        {"label": "Active Users", "value": str(active_cnt), "delta": "active", "tone": "positive"},
+        {"label": "Archived Users", "value": str(arch_cnt), "delta": "archived" if arch_cnt > 0 else "none", "tone": "negative" if arch_cnt > 0 else "neutral"},
+    ])
+
+    m_section("Registered users")
     for u in users:
-        uname = u[1] if len(u) > 1 else "User"
-        role = u[3] if len(u) > 3 else "user"
-        status = u[6] if len(u) > 6 else "active"
+        uid_raw = str(u[0])
+        uname = str(u[1]) if len(u) > 1 and u[1] else "User"
+        urole = str(u[2]).lower() if len(u) > 2 and u[2] else "user"
+        uemail = str(u[3]) if len(u) > 3 and u[3] else ""
+        uphone = str(u[4]) if len(u) > 4 and u[4] else ""
+        usid = str(u[5]) if len(u) > 5 and u[5] else ""
+        ustatus = str(u[6]).lower() if len(u) > 6 and u[6] else "active"
+        ucreated = str(u[7]) if len(u) > 7 and u[7] else ""
+
+        role_chip = '<span class="m-chip positive" style="font-size:10px; padding:2px 6px;">ADMIN</span>' if urole == 'admin' else '<span class="m-chip muted" style="font-size:10px; padding:2px 6px;">USER</span>'
+        status_chip = '<span class="m-chip positive" style="font-size:10px; padding:2px 6px;">ACTIVE</span>' if ustatus == 'active' else '<span class="m-chip negative" style="font-size:10px; padding:2px 6px;">ARCHIVED</span>'
+
+        meta_parts = []
+        if usid:
+            meta_parts.append(f"ID: {html.escape(str(usid))}")
+        if uemail:
+            meta_parts.append(f"📧 {html.escape(uemail)}")
+        if uphone:
+            meta_parts.append(f"📱 {html.escape(uphone)}")
+        meta_text = " · ".join(meta_parts) if meta_parts else "No contact details"
+
         st.markdown(
-            f'<div class="m-list-card">'
-            f'<div style="min-width:0;"><div class="m-list-title">{html.escape(str(uname))}</div>'
-            f'<div class="m-list-sub">Role: {html.escape(str(role))} · Status: {html.escape(str(status))}</div></div>'
+            f'<div class="m-list-card" style="margin-bottom: 4px;">'
+            f'  <div style="min-width:0; flex:1;">'
+            f'    <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">'
+            f'      <span class="m-list-title" style="font-size:15px; font-weight:600;">{html.escape(uname)}</span>'
+            f'      {role_chip}'
+            f'      {status_chip}'
+            f'    </div>'
+            f'    <div class="m-list-sub" style="font-size:11px; color:var(--m-muted-fg);">{meta_text}</div>'
+            f'  </div>'
             f'</div>',
             unsafe_allow_html=True,
         )
+
+        with st.expander(f"Edit {uname}", icon=":material/edit:"):
+            with st.form(f"m_form_edit_u_{uid_raw}"):
+                st.caption("Account Details")
+                e_name = st.text_input("Username", value=uname, key=f"eun_{uid_raw}")
+                e_email = st.text_input("Email", value=uemail, key=f"eue_{uid_raw}")
+                e_phone = st.text_input("Phone", value=uphone, key=f"euph_{uid_raw}")
+                e_role = st.selectbox("Role", ["user", "admin"], index=1 if urole == "admin" else 0, key=f"eur_{uid_raw}")
+                if st.form_submit_button("Save Details", type="primary", use_container_width=True):
+                    res_p = auth_service.update_profile(uid_raw, e_name.strip(), e_email.strip(), e_phone.strip())
+                    if res_p is True:
+                        auth_service.update_role(uid_raw, e_role)
+                        st.session_state["m_toast"] = f"User '{e_name.strip()}' updated!"
+                        st.rerun()
+                    else:
+                        st.error(str(res_p))
+
+            with st.form(f"m_form_pwd_{uid_raw}"):
+                st.caption("Change Password")
+                e_pwd = st.text_input("New Password", type="password", placeholder="Enter new password (min 6 chars)", key=f"eup_{uid_raw}")
+                if st.form_submit_button("Reset Password", use_container_width=True):
+                    if not e_pwd or len(e_pwd) < 6:
+                        st.error("Password must be at least 6 characters.")
+                    else:
+                        auth_service.update_password(uid_raw, e_pwd)
+                        st.session_state["m_toast"] = f"Password updated for {uname}!"
+                        st.rerun()
+
+            if ustatus == "active":
+                if uid_raw != "admin" and uname.lower() != "root":
+                    if st.button(f"Archive {uname}", key=f"btn_arch_{uid_raw}", use_container_width=True):
+                        auth_service.delete_user(uid_raw)
+                        st.session_state["m_toast"] = f"User '{uname}' archived."
+                        st.rerun()
+                else:
+                    st.caption("🛡️ Primary admin account cannot be archived.")
+            else:
+                if st.button(f"Restore {uname}", key=f"btn_unarch_{uid_raw}", type="primary", use_container_width=True):
+                    auth_service.unarchive_user(uid_raw)
+                    st.session_state["m_toast"] = f"User '{uname}' restored."
+                    st.rerun()

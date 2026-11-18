@@ -12,7 +12,7 @@ def apply_mobile_styles():
         /* hallmark: v2.0.0 | theme: obsidian-fintech-mobile | genre: modern-minimal | viewport: 375-430px */
         /* critique: mobile-first thumb dock, 16px non-zoom inputs, unified BaseWeb + React Aria pills */
 
-        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
         :root {
             --m-bg: #090D16;
@@ -36,7 +36,7 @@ def apply_mobile_styles():
             --m-danger-low: rgba(248, 113, 113, 0.14);
             --m-warning: #FBBF24;
             --m-warning-low: rgba(251, 191, 36, 0.14);
-            --m-font-ui: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+            --m-font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             --m-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
             --m-rad-hero: 16px;
             --m-rad-card: 12px;
@@ -63,6 +63,7 @@ def apply_mobile_styles():
         .stApp {
             background-color: var(--m-bg) !important;
             color: var(--m-ink-1) !important;
+            font-family: var(--m-font-ui) !important;
             overflow-x: clip !important;
         }
 
@@ -106,8 +107,69 @@ def apply_mobile_styles():
         }
 
         /* ============================================================
-           2. TYPOGRAPHY & NUMERIC DISCIPLINE
+           2. TYPOGRAPHY & NUMERIC DISCIPLINE (Unified Global System Font)
         ============================================================ */
+        html, body, .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        [data-testid="stMainBlockContainer"],
+        [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"],
+        [data-testid="stElementContainer"],
+        [data-testid="stSelectbox"] div:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]),
+        [data-testid="stSelectbox"] span:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]),
+        [data-baseweb="select"] div:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]),
+        [data-baseweb="select"] span:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]),
+        [data-baseweb="popover"] div:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]),
+        [data-baseweb="menu"] div:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]),
+        [data-baseweb="input"] input,
+        [data-testid="stWidgetLabel"],
+        [data-testid="stWidgetLabel"] p,
+        [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMarkdownContainer"] span:not([data-testid="stIconMaterial"]):not([class*="material-symbols"]),
+        .stMarkdown,
+        .stMarkdown p,
+        button:not([data-testid="stIconMaterial"]),
+        button p,
+        .stButton > button,
+        .stButton > button p,
+        input, select, textarea,
+        p, label,
+        .m-hero-card,
+        .m-kpi-cell,
+        .m-alert-row,
+        .m-list-card {
+            font-family: var(--m-font-ui) !important;
+        }
+
+        /* ============================================================
+           CRITICAL: PRESERVE MATERIAL SYMBOLS & ICONS (Never render ligature text)
+        ============================================================ */
+        [data-testid="stIconMaterial"],
+        [data-testid="stIconMaterial"] *,
+        .material-symbols-rounded,
+        .material-symbols-outlined,
+        .material-icons,
+        span.material-symbols-rounded,
+        button [data-testid="stIconMaterial"],
+        .stButton [data-testid="stIconMaterial"],
+        [data-testid="stPopoverButton"] [data-testid="stIconMaterial"],
+        [class*="st-key-"] [data-testid="stIconMaterial"] {
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+            font-weight: normal !important;
+            font-style: normal !important;
+            line-height: 1 !important;
+            letter-spacing: normal !important;
+            text-transform: none !important;
+            display: inline-block !important;
+            white-space: nowrap !important;
+            word-wrap: normal !important;
+            direction: ltr !important;
+            -webkit-font-feature-settings: 'liga' 1 !important;
+            font-feature-settings: 'liga' 1 !important;
+            -webkit-font-smoothing: antialiased !important;
+        }
+
         h1, h2, h3, h4, h5, h6 {
             font-family: var(--m-font-ui) !important;
             color: var(--m-ink-1) !important;
@@ -123,7 +185,13 @@ def apply_mobile_styles():
             line-height: 1.45;
         }
 
-        .m-mono {
+        /* Monospace discipline for tabular numeric amounts */
+        .m-mono, .m-mono *,
+        .m-hero-val,
+        .m-kpi-val,
+        .m-alert-amt,
+        .m-list-amt,
+        code, pre {
             font-family: var(--m-font-mono) !important;
             font-variant-numeric: tabular-nums !important;
         }
@@ -295,13 +363,61 @@ def apply_mobile_styles():
             margin: 0 !important;
             overflow: hidden !important;
         }
+        .st-key-m_top_curr_sel [data-baseweb="select"] *,
         .st-key-m_top_curr_sel [data-baseweb="select"] div,
         .st-key-m_top_curr_sel [data-baseweb="select"] input {
+            font-family: var(--m-font-ui) !important;
             font-size: 13px !important;
             font-weight: 600 !important;
             line-height: 1.2 !important;
         }
         .st-key-m_top_curr_sel [data-baseweb="select"] svg {
+            width: 16px !important;
+            height: 16px !important;
+            margin: 0 !important;
+        }
+
+        /* Period filter dropdowns: 2026 / All / Calendar (exact match to currency dropdown & profile button) */
+        .st-key-m_dash_year,
+        .st-key-m_dash_month,
+        .st-key-m_dash_mode,
+        .st-key-m_dash_year > div,
+        .st-key-m_dash_month > div,
+        .st-key-m_dash_mode > div,
+        .st-key-m_dash_year [data-testid="stSelectbox"],
+        .st-key-m_dash_month [data-testid="stSelectbox"],
+        .st-key-m_dash_mode [data-testid="stSelectbox"],
+        .st-key-m_dash_year [data-baseweb="select"],
+        .st-key-m_dash_month [data-baseweb="select"],
+        .st-key-m_dash_mode [data-baseweb="select"] {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+        .st-key-m_dash_year [data-baseweb="select"] > div,
+        .st-key-m_dash_month [data-baseweb="select"] > div,
+        .st-key-m_dash_mode [data-baseweb="select"] > div {
+            min-height: 40px !important;
+            height: 40px !important;
+            max-height: 40px !important;
+            border-radius: var(--m-rad-card) !important;
+            padding: 0 6px 0 10px !important;
+            background-color: var(--m-surface-2) !important;
+            border: 1px solid var(--m-border-strong) !important;
+            align-items: center !important;
+        }
+        .st-key-m_dash_year [data-baseweb="select"] *,
+        .st-key-m_dash_month [data-baseweb="select"] *,
+        .st-key-m_dash_mode [data-baseweb="select"] * {
+            font-family: var(--m-font-ui) !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            line-height: 1.2 !important;
+            color: var(--m-ink-1) !important;
+        }
+        .st-key-m_dash_year [data-baseweb="select"] svg,
+        .st-key-m_dash_month [data-baseweb="select"] svg,
+        .st-key-m_dash_mode [data-baseweb="select"] svg {
             width: 16px !important;
             height: 16px !important;
             margin: 0 !important;
@@ -347,9 +463,11 @@ def apply_mobile_styles():
             display: none !important;
         }
         .st-key-m_profile_pop [data-testid="stPopoverButton"] [data-testid="stIconMaterial"] {
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
             margin: 0 !important;
             font-size: 20px !important;
             line-height: 1 !important;
+            display: inline-block !important;
         }
         .wf-m-profile-head {
             padding-bottom: 10px;
@@ -432,9 +550,11 @@ def apply_mobile_styles():
         }
 
         [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button [data-testid="stIconMaterial"] {
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
             font-size: 20px !important;
             line-height: 1 !important;
             margin: 0 !important;
+            display: inline-block !important;
         }
 
         [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button [data-testid="stMarkdownContainer"] {
@@ -476,12 +596,16 @@ def apply_mobile_styles():
             box-shadow: 0 6px 20px var(--m-accent-glow) !important;
             padding: 0 !important;
         }
-        .st-key-m_dock_add button [data-testid="stIconMaterial"],
-        .st-key-m_dock_add button * {
+        .st-key-m_dock_add button [data-testid="stIconMaterial"] {
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
             color: var(--m-accent-ink) !important;
             font-size: 24px !important;
             line-height: 1 !important;
             margin: 0 !important;
+            display: inline-block !important;
+        }
+        .st-key-m_dock_add button * {
+            color: var(--m-accent-ink) !important;
         }
 
         /* Hide zero-height marker divs from consuming vertical gap */
@@ -557,16 +681,23 @@ def apply_mobile_styles():
             min-width: 0;
         }
 
-        .m-kpi-label { font-size: 12px; color: var(--m-ink-2); }
+        .m-kpi-label {
+            font-family: var(--m-font-ui) !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+            color: var(--m-ink-2) !important;
+            letter-spacing: -0.01em !important;
+            line-height: 1.3 !important;
+        }
         .m-kpi-val {
-            font-family: var(--m-font-mono);
-            font-variant-numeric: tabular-nums;
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--m-ink-1);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-family: var(--m-font-mono) !important;
+            font-variant-numeric: tabular-nums !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            color: var(--m-ink-1) !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
 
         .m-chip {
@@ -603,44 +734,87 @@ def apply_mobile_styles():
         .m-alert-row.tone-accent { border-left-color: var(--m-accent); }
 
         .m-alert-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--m-ink-1);
-            line-height: 1.3;
+            font-family: var(--m-font-ui) !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            color: var(--m-ink-1) !important;
+            line-height: 1.3 !important;
         }
         .m-alert-meta {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 3px;
-            font-size: 11px;
-            color: var(--m-ink-3);
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            margin-top: 3px !important;
+            font-family: var(--m-font-ui) !important;
+            font-size: 11px !important;
+            color: var(--m-ink-3) !important;
         }
         .m-alert-amt {
-            font-family: var(--m-font-mono);
-            font-variant-numeric: tabular-nums;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--m-ink-1);
-            white-space: nowrap;
+            font-family: var(--m-font-mono) !important;
+            font-variant-numeric: tabular-nums !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            color: var(--m-ink-1) !important;
+            white-space: nowrap !important;
         }
 
-        /* Compact Alert Paid Pill Button */
-        [class*="st-key-m_alert_"] button {
-            height: 36px !important;
-            min-height: 36px !important;
-            padding: 0 11px !important;
-            border-radius: var(--m-rad-full) !important;
+        /* Compact Alert Action Button (Receive / Paid) — exact 13px font and size matching left side */
+        [class*="st-key-m_alert_"] {
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        [class*="st-key-m_alert_"] button,
+        [class*="st-key-m_alert_"] .stButton > button,
+        [class*="st-key-m_alert_"] [data-testid="stBaseButton-secondary"] {
+            height: 32px !important;
+            min-height: 32px !important;
+            max-height: 32px !important;
+            padding: 0 8px !important;
+            border-radius: 8px !important;
             background-color: var(--m-surface-2) !important;
             border: 1px solid var(--m-border-strong) !important;
             color: var(--m-ink-1) !important;
-            font-size: 12px !important;
+            font-family: var(--m-font-ui) !important;
+            font-size: 13px !important;
             font-weight: 600 !important;
+            line-height: 1 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 4px !important;
             white-space: nowrap !important;
+            transition: all var(--m-dur) var(--m-ease) !important;
+        }
+        [class*="st-key-m_alert_"] button [data-testid="stMarkdownContainer"] p,
+        [class*="st-key-m_alert_"] button [data-testid="stMarkdownContainer"] span:not([data-testid="stIconMaterial"]) {
+            font-family: var(--m-font-ui) !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            line-height: 1 !important;
+            color: inherit !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        [class*="st-key-m_alert_"] button [data-testid="stIconMaterial"],
+        [class*="st-key-m_alert_"] button svg {
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+            font-size: 16px !important;
+            width: 16px !important;
+            height: 16px !important;
+            line-height: 16px !important;
+            vertical-align: middle !important;
+            display: inline-block !important;
         }
         [class*="st-key-m_alert_"] button:hover {
             background-color: var(--m-success-low) !important;
             border-color: var(--m-success-mid) !important;
+            color: var(--m-success) !important;
+        }
+        [class*="st-key-m_alert_"] button:hover * {
             color: var(--m-success) !important;
         }
 
@@ -896,6 +1070,20 @@ def apply_mobile_styles():
             font-weight: 600 !important;
             justify-content: flex-start !important;
             padding: 0 14px !important;
+            transition: all var(--m-dur) var(--m-ease) !important;
+        }
+        [class*="st-key-m_hub_"] button:hover,
+        [class*="st-key-m_hub_"] button:active,
+        [class*="st-key-m_hub_"] button:focus {
+            background-color: var(--m-surface-2) !important;
+            border-color: var(--m-accent) !important;
+            color: var(--m-accent) !important;
+            box-shadow: 0 0 0 1px var(--m-accent), 0 2px 10px var(--m-accent-glow) !important;
+        }
+        [class*="st-key-m_hub_"] button:hover *,
+        [class*="st-key-m_hub_"] button:active *,
+        [class*="st-key-m_hub_"] button:focus * {
+            color: var(--m-accent) !important;
         }
 
         /* Popovers & Delete Confirmation */

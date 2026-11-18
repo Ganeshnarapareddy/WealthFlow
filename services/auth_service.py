@@ -52,18 +52,55 @@ class AuthService:
         return None
 
     @staticmethod
-    def signup(username, password, email=None, phone=None):
+    def signup(username, password, email=None, phone=None, role="user"):
         """Create a new user or reclaim an archived one."""
+        username = (username or "").strip()
+        email = (email or "").strip() or None
+        phone = (phone or "").strip() or None
+        role = (role or "user").strip().lower()
+        if role not in ("admin", "user"):
+            role = "user"
+
+        if not username:
+            return "Username is required."
+        if not password or len(password) < 6:
+            return "Password must be at least 6 characters."
         if not email and not phone:
             return "Email or Phone is mandatory."
-            
-        # Check if an active user exists
-        res = db.execute("SELECT id FROM wf_users WHERE (username = ? OR (email = ? AND email != '') OR (phone = ? AND phone != '')) AND status = 'active'", (username, email, phone))
-        if res and res.rows:
-            return "User with this name/contact already exists."
-        
+
+        # Check if username already exists case-insensitively across all users
+        res_u = db.execute(
+            "SELECT id FROM wf_users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))",
+            (username,)
+        )
+        if res_u and res_u.rows:
+            return "Username already present."
+
+        # Check if email already exists among active users
+        if email:
+            res_e = db.execute(
+                "SELECT id FROM wf_users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND status = 'active'",
+                (email,)
+            )
+            if res_e and res_e.rows:
+                return "Email already present."
+
+        # Check if phone already exists among active users
+        if phone:
+            res_p = db.execute(
+                "SELECT id FROM wf_users WHERE TRIM(phone) = TRIM(?) AND status = 'active'",
+                (phone,)
+            )
+            if res_p and res_p.rows:
+                return "Phone number already present."
+
         # Check for archived account to reclaim
-        res_arch = db.execute("SELECT id FROM wf_users WHERE ((email = ? AND email != '') OR (phone = ? AND phone != '')) AND status = 'archived'", (email, phone))
+        res_arch = None
+        if email or phone:
+            res_arch = db.execute(
+                "SELECT id FROM wf_users WHERE ((email = ? AND email != '') OR (phone = ? AND phone != '')) AND status = 'archived'",
+                (email or "", phone or "")
+            )
         if res_arch and res_arch.rows:
             uid = res_arch.rows[0][0]
             pwd_hash = AuthService.hash_password(password)
@@ -74,12 +111,12 @@ class AuthService:
         pwd_hash = AuthService.hash_password(password)
         sid = AuthService.generate_short_id()
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
+
         db.execute(
             "INSERT INTO wf_users (id, username, password_hash, email, phone, role, created_at, short_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')",
-            (uid, username, pwd_hash, email, phone, 'user', now, sid)
+            (uid, username, pwd_hash, email, phone, role, now, sid)
         )
-        
+
         # Create default account for new user
         db.execute(
             "INSERT INTO accounts (id, user_id, account_name, balance, account_type) VALUES (?, ?, ?, ?, ?)",
@@ -89,23 +126,56 @@ class AuthService:
 
     @staticmethod
     def update_username(user_id, new_username):
-        """Allow users/admin to change username."""
-        new_username = new_username.strip()
-        # Check if exists
-        res = db.execute("SELECT id FROM wf_users WHERE username = ? AND id != ?", (new_username, user_id))
-        if res and res.rows: return False
+        """Allow users/admin to change username with case-insensitive uniqueness check."""
+        new_username = (new_username or "").strip()
+        if not new_username:
+            return "Username cannot be empty."
+        res = db.execute(
+            "SELECT id FROM wf_users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) AND id != ?",
+            (new_username, user_id)
+        )
+        if res and res.rows:
+            return "Username already present."
         db.execute("UPDATE wf_users SET username = ? WHERE id = ?", (new_username, user_id))
         return True
 
     @staticmethod
     def update_profile(user_id, username, email, phone):
-        """Update username, email, and phone in one go."""
-        username = username.strip()
-        # Check if new username is taken by another user
-        res = db.execute("SELECT id FROM wf_users WHERE username = ? AND id != ?", (username, user_id))
-        if res and res.rows: return "Username already taken"
-        
-        db.execute("UPDATE wf_users SET username = ?, email = ?, phone = ? WHERE id = ?", (username, email, phone, user_id))
+        """Update username, email, and phone with case-insensitive uniqueness checks."""
+        username = (username or "").strip()
+        email = (email or "").strip()
+        phone = (phone or "").strip()
+
+        if not username:
+            return "Username cannot be empty."
+
+        # Check if new username is taken by another user (case-insensitive)
+        res_u = db.execute(
+            "SELECT id FROM wf_users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) AND id != ?",
+            (username, user_id)
+        )
+        if res_u and res_u.rows:
+            return "Username already present."
+
+        # Check if new email is taken by another active user
+        if email:
+            res_e = db.execute(
+                "SELECT id FROM wf_users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND id != ? AND status = 'active'",
+                (email, user_id)
+            )
+            if res_e and res_e.rows:
+                return "Email already present."
+
+        # Check if new phone is taken by another active user
+        if phone:
+            res_p = db.execute(
+                "SELECT id FROM wf_users WHERE TRIM(phone) = TRIM(?) AND id != ? AND status = 'active'",
+                (phone, user_id)
+            )
+            if res_p and res_p.rows:
+                return "Phone number already present."
+
+        db.execute("UPDATE wf_users SET username = ?, email = ?, phone = ? WHERE id = ?", (username, email or None, phone or None, user_id))
         return True
 
     @staticmethod
@@ -113,6 +183,15 @@ class AuthService:
         """Securely update a user's password."""
         pwd_hash = AuthService.hash_password(new_password)
         db.execute("UPDATE wf_users SET password_hash = ? WHERE id = ?", (pwd_hash, user_id))
+        return True
+
+    @staticmethod
+    def update_role(user_id, role):
+        """Update a user's role ('admin' or 'user')."""
+        role = (role or "user").strip().lower()
+        if role not in ("admin", "user"):
+            return "Invalid role."
+        db.execute("UPDATE wf_users SET role = ? WHERE id = ?", (role, user_id))
         return True
 
     @staticmethod
@@ -138,8 +217,53 @@ class AuthService:
         return True
 
     @staticmethod
+    def purge_expired_archived_users(retention_days=10):
+        """Permanently delete archived users whose deletion date is older than retention_days (default 10 days), along with all their data."""
+        try:
+            cutoff = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d %H:%M")
+            res = db.execute(
+                "SELECT id FROM wf_users WHERE status = 'archived' AND deleted_at IS NOT NULL AND deleted_at != '' AND deleted_at <= ? AND id != 'admin'",
+                (cutoff,)
+            )
+            if not res or not res.rows:
+                return 0
+
+            purged_count = 0
+            for row in res.rows:
+                target_uid = row[0]
+                # Cascade cleanup across all user-scoped tables
+                tables = [
+                    ("actioned_alerts", "user_id"),
+                    ("assets", "user_id"),
+                    ("budgets", "user_id"),
+                    ("goals", "user_id"),
+                    ("loans", "user_id"),
+                    ("settings", "user_id"),
+                    ("subscriptions", "user_id"),
+                    ("transactions", "user_id"),
+                    ("trips", "user_id"),
+                    ("user_sessions", "user_id"),
+                    ("accounts", "user_id"),
+                    ("credit_cards", "user_id"),
+                ]
+                for tbl, col in tables:
+                    try:
+                        db.execute(f"DELETE FROM {tbl} WHERE {col} = ?", (target_uid,))
+                    except Exception:
+                        pass
+                
+                # Delete user record from wf_users
+                db.execute("DELETE FROM wf_users WHERE id = ? AND id != 'admin'", (target_uid,))
+                purged_count += 1
+
+            return purged_count
+        except Exception:
+            return 0
+
+    @staticmethod
     def get_all_users():
-        """List all users (including archived)."""
+        """List all users (including archived), automatically purging archived accounts past retention period."""
+        AuthService.purge_expired_archived_users(retention_days=10)
         res = db.execute("SELECT id, username, role, email, phone, short_id, status, created_at FROM wf_users ORDER BY (CASE WHEN role = 'admin' THEN 0 ELSE 1 END), created_at DESC")
         if res and res.rows:
             return res.rows

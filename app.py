@@ -129,6 +129,7 @@ if not st.session_state.user:
 # AUTO-REPAIR: Database integrity fixes (once per session, single batched call)
 if not st.session_state.get('_db_repaired'):
     try:
+        AuthService.purge_expired_archived_users(retention_days=10)
         db.batch([
             ("UPDATE wf_users SET username = TRIM(username)", ()),
             ("UPDATE wf_users SET short_id = '00001' WHERE role = 'admin' AND (short_id IS NULL OR short_id = 'None')", ()),
@@ -212,7 +213,7 @@ def login_page():
                         st.warning("Username must be >= 3 and Password >= 6 characters")
                     else:
                         uid_res = AuthService.signup(s_user.strip(), s_pass, s_email, s_phone)
-                        if isinstance(uid_res, str) and len(uid_res) > 30:
+                        if isinstance(uid_res, str) and len(uid_res) == 36 and "-" in uid_res:
                             user = AuthService.login(s_user.strip(), s_pass)
                             if user:
                                 st.session_state.user = user
@@ -2498,10 +2499,8 @@ elif page == "Admin" and st.session_state.user['role'] == 'admin':
             new_ph = st.text_input("Phone")
             new_r = st.selectbox("Role", ["user", "admin"])
             if st.form_submit_button("Create"):
-                uid_res = AuthService.signup(new_u.strip(), new_p, new_e, new_ph)
-                if isinstance(uid_res, str) and len(uid_res) > 30:
-                    if new_r == 'admin':
-                        db.execute("UPDATE wf_users SET role = 'admin' WHERE id = ?", (uid_res,))
+                uid_res = AuthService.signup(new_u.strip(), new_p, new_e, new_ph, role=new_r)
+                if isinstance(uid_res, str) and len(uid_res) == 36 and "-" in uid_res:
                     st.success("User created!")
                     st.rerun()
                 else:
@@ -2545,9 +2544,11 @@ elif page == "Admin" and st.session_state.user['role'] == 'admin':
                 u_uname = st.text_input("Username", value=uname, key=f"un_{uid_raw}")
                 u_email = st.text_input("Email", value=uemail or "", key=f"e_{uid_raw}")
                 u_phone = st.text_input("Phone", value=uphone or "", key=f"ph_{uid_raw}")
+                u_role = st.selectbox("Role", ["user", "admin"], index=1 if urole == 'admin' else 0, key=f"r_{uid_raw}")
                 if st.button("Update Profile Info", key=f"uc_{uid_raw}"):
                     res = AuthService.update_profile(uid_raw, u_uname, u_email, u_phone)
                     if res is True:
+                        AuthService.update_role(uid_raw, u_role)
                         st.success("User Profile updated!")
                         st.rerun()
                     else:

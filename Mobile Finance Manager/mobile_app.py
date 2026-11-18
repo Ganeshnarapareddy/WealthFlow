@@ -164,6 +164,13 @@ if not st.session_state.user:
             st.session_state.user = user_data
             st.rerun()
 
+if not st.session_state.get('_purged_archived'):
+    try:
+        AuthService.purge_expired_archived_users(retention_days=10)
+        st.session_state['_purged_archived'] = True
+    except Exception:
+        pass
+
 # Auth Gate
 if not st.session_state.user:
     render_auth_view(LOGO_B64, AuthService, cookies, db)

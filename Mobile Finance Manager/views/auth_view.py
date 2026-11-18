@@ -60,11 +60,11 @@ def render_auth_view(logo_b64: str | None, auth_service, cookies, db):
                 elif len(s_pass) < 6:
                     st.error("Password must be at least 6 characters.")
                 else:
-                    ok, msg = auth_service.signup(s_user.strip(), s_pass, s_email.strip(), s_phone.strip())
-                    if ok:
+                    res = auth_service.signup(s_user.strip(), s_pass, s_email.strip(), s_phone.strip())
+                    if isinstance(res, str) and len(res) == 36 and "-" in res:
                         st.success("Account created! Switch to Sign in to continue.")
                     else:
-                        st.error(msg)
+                        st.error(str(res))
 
     with tab_reset:
         with st.form("m_reset_form"):

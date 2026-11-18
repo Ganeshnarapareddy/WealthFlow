@@ -99,23 +99,11 @@ def render_tripflow_view(uid: str, user_data: dict, trip_service, db):
         with a3:
             m_delete_popover(trip_id, f"mtrip_{trip_id}", trip_service.delete_trip, trip["name"], pass_user_id=uid, toast_msg="Trip deleted.")
 
-        # 4-pill state-persisted switcher
-        tabs = ["Summary", "Add", "Ledger", "Friends"]
-        if st.session_state.get("m_trip_tab") not in tabs:
-            st.session_state["m_trip_tab"] = tabs[0]
-        picked_tab = st.segmented_control(
-            "Trip Section",
-            tabs,
-            default=st.session_state["m_trip_tab"],
-            label_visibility="collapsed",
-            key=f"m_trip_seg_{trip_id}",
-        )
-        if picked_tab is not None:
-            st.session_state["m_trip_tab"] = picked_tab
-        active_tab = st.session_state["m_trip_tab"]
+        # 4-tab native touch switcher — guaranteed active highlight, zero blanking
+        t_sum, t_add, t_led, t_fri = st.tabs(["Summary", "Add", "Ledger", "Friends"])
 
         # 1. SUMMARY & SETTLE-UP
-        if active_tab == "Summary":
+        with t_sum:
             if not summary["members"]:
                 m_empty("No friends yet", "Switch to Friends tab to add trip members.")
             else:
@@ -190,21 +178,14 @@ def render_tripflow_view(uid: str, user_data: dict, trip_service, db):
                 )
 
         # 2. ADD EXPENSE / ADVANCE
-        elif active_tab == "Add":
+        with t_add:
             if not summary["members"]:
                 m_empty("Add friends first", "Add at least one friend in the Friends tab before logging expenses.")
             else:
-                if "m_tadd_sub" not in st.session_state:
-                    st.session_state["m_tadd_sub"] = "Expense"
-                sub = st.segmented_control(
-                    "Add Mode", ["Expense", "Advance"], default=st.session_state["m_tadd_sub"],
-                    label_visibility="collapsed", key=f"m_tadd_seg_{trip_id}",
-                )
-                if sub is not None:
-                    st.session_state["m_tadd_sub"] = sub
                 m_names = [m["name"] for m in summary["members"]]
+                t_sub_exp, t_sub_adv = st.tabs(["Expense", "Advance"])
 
-                if st.session_state["m_tadd_sub"] == "Expense":
+                with t_sub_exp:
                     ev = st.session_state.get("m_te_v", 0)
                     with st.form(f"m_te_form_{trip_id}_{ev}"):
                         e_amt = st.number_input("Amount *", min_value=0.01, step=1.0, value=None, placeholder="0.00", key=f"m_te_amt_{trip_id}_{ev}")
@@ -228,7 +209,8 @@ def render_tripflow_view(uid: str, user_data: dict, trip_service, db):
                                 st.session_state["m_te_v"] = ev + 1
                                 st.session_state["m_trip_toast"] = f"Expense recorded: {e_desc.strip()} ({fmt(e_amt)})"
                                 st.rerun(scope="fragment")
-                else:
+
+                with t_sub_adv:
                     av = st.session_state.get("m_ta_v", 0)
                     with st.form(f"m_ta_form_{trip_id}_{av}"):
                         a_mem = st.selectbox("Friend *", m_names, index=0, key=f"m_ta_mem_{trip_id}_{av}")
@@ -246,7 +228,7 @@ def render_tripflow_view(uid: str, user_data: dict, trip_service, db):
                                 st.rerun(scope="fragment")
 
         # 3. TRIP LEDGER
-        elif active_tab == "Ledger":
+        with t_led:
             df_exp = bundle["expenses_df"]
             df_adv = bundle["advances_df"]
 
@@ -289,7 +271,7 @@ def render_tripflow_view(uid: str, user_data: dict, trip_service, db):
                         )
 
         # 4. FRIENDS & LIMITS
-        elif active_tab == "Friends":
+        with t_fri:
             mv = st.session_state.get("m_tm_v", 0)
             with st.form(f"m_tm_form_{trip_id}_{mv}"):
                 fn = st.text_input("Add Friend *", value="", placeholder="e.g. Rahul, Bharat", key=f"m_tm_name_{trip_id}_{mv}")
