@@ -360,7 +360,7 @@ def apply_mobile_styles():
         .wf-m-profile-id { font-size: 12px; color: var(--m-ink-3); font-family: var(--m-font-mono); }
 
         /* ============================================================
-           4. FIXED 5-TAB BOTTOM iOS DOCK (Forced Horizontal Row)
+           4. FIXED 5-TAB BOTTOM iOS DOCK (Mathematically Symmetrical 5-Col Grid)
         ============================================================ */
         [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) {
             position: fixed !important;
@@ -370,31 +370,40 @@ def apply_mobile_styles():
             width: 100% !important;
             max-width: 460px !important;
             z-index: 95 !important;
-            background: rgba(17, 23, 36, 0.95) !important;
+            background: rgba(17, 23, 36, 0.96) !important;
             backdrop-filter: blur(18px) !important;
             -webkit-backdrop-filter: blur(18px) !important;
             border-top: 1px solid var(--m-border-strong) !important;
-            padding: 8px 8px calc(10px + env(safe-area-inset-bottom, 0px)) 8px !important;
+            padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)) 10px !important;
             margin: 0 !important;
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
+            display: grid !important;
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
             align-items: center !important;
-            justify-content: space-between !important;
-            gap: 4px !important;
+            justify-items: center !important;
+            gap: 6px !important;
         }
 
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"] {
-            flex: 1 1 0 !important;
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton {
+            width: 100% !important;
             min-width: 0 !important;
-            width: 20% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            gap: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
 
         [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button {
-            height: 46px !important;
-            min-height: 46px !important;
+            height: 48px !important;
+            min-height: 48px !important;
             width: 100% !important;
-            padding: 4px 2px !important;
+            max-width: 74px !important;
+            padding: 4px 4px !important;
+            margin: 0 auto !important;
             border-radius: 12px !important;
             background-color: transparent !important;
             border: 1px solid transparent !important;
@@ -409,11 +418,36 @@ def apply_mobile_styles():
             box-shadow: none !important;
         }
 
+        /* Stack Material icon cleanly ABOVE label text on all 4 nav slots */
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button > div,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button > div > span {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 2px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button [data-testid="stIconMaterial"] {
+            font-size: 20px !important;
+            line-height: 1 !important;
+            margin: 0 !important;
+        }
+
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button [data-testid="stMarkdownContainer"] {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
         [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button [data-testid="stMarkdownContainer"] p {
             font-size: 11px !important;
             line-height: 1.1 !important;
             margin: 0 !important;
             color: inherit !important;
+            text-align: center !important;
         }
 
         [data-testid="stHorizontalBlock"]:has(.st-key-m_dock_home) .stButton > button[kind="primary"] {
@@ -427,13 +461,14 @@ def apply_mobile_styles():
             color: var(--m-accent) !important;
         }
 
-        /* Elevated Center + Quick-Add FAB */
+        /* Elevated Center + Quick-Add FAB — dead-center in slot 3 (50% axis) */
         .st-key-m_dock_add button {
             width: 48px !important;
             min-width: 48px !important;
+            max-width: 48px !important;
             height: 48px !important;
             min-height: 48px !important;
-            margin: -14px auto 0 auto !important;
+            margin: -12px auto 0 auto !important;
             border-radius: var(--m-rad-full) !important;
             background-color: var(--m-accent) !important;
             border: 2px solid var(--m-bg) !important;
@@ -441,9 +476,12 @@ def apply_mobile_styles():
             box-shadow: 0 6px 20px var(--m-accent-glow) !important;
             padding: 0 !important;
         }
+        .st-key-m_dock_add button [data-testid="stIconMaterial"],
         .st-key-m_dock_add button * {
             color: var(--m-accent-ink) !important;
-            font-size: 22px !important;
+            font-size: 24px !important;
+            line-height: 1 !important;
+            margin: 0 !important;
         }
 
         /* Hide zero-height marker divs from consuming vertical gap */

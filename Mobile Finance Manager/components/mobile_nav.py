@@ -105,11 +105,11 @@ def render_mobile_dock():
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        if st.button("Home", icon=":material/home:", key="m_dock_home", type="primary" if active_dock == "Home" else "secondary"):
+        if st.button("Home", icon=":material/home:", key="m_dock_home", type="primary" if active_dock == "Home" else "secondary", use_container_width=True):
             st.session_state["m_page"] = "Home"
             st.rerun()
     with c2:
-        if st.button("Ledger", icon=":material/receipt_long:", key="m_dock_ledger", type="primary" if active_dock == "Ledger" else "secondary"):
+        if st.button("Ledger", icon=":material/receipt_long:", key="m_dock_ledger", type="primary" if active_dock == "Ledger" else "secondary", use_container_width=True):
             st.session_state["m_page"] = "Ledger"
             st.rerun()
     with c3:
@@ -117,10 +117,10 @@ def render_mobile_dock():
             st.session_state["m_page"] = "QuickAdd"
             st.rerun()
     with c4:
-        if st.button("Trips", icon=":material/flight_takeoff:", key="m_dock_trips", type="primary" if active_dock == "Trips" else "secondary"):
+        if st.button("Trips", icon=":material/flight_takeoff:", key="m_dock_trips", type="primary" if active_dock == "Trips" else "secondary", use_container_width=True):
             st.session_state["m_page"] = "Trips"
             st.rerun()
     with c5:
-        if st.button("More", icon=":material/grid_view:", key="m_dock_more", type="primary" if active_dock == "More" else "secondary"):
+        if st.button("More", icon=":material/grid_view:", key="m_dock_more", type="primary" if active_dock == "More" else "secondary", use_container_width=True):
             st.session_state["m_page"] = "More"
             st.rerun()
