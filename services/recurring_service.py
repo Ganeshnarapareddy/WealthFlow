@@ -65,6 +65,18 @@ class RecurringService:
             return (start_date.replace(day=1, month=m, year=y) + timedelta(days=31)).replace(day=1) - timedelta(days=1)
 
     @staticmethod
+    def _project_next_date(next_date, cycle, today):
+        """Roll a past renewal date forward by its billing cycle until it reaches today or later."""
+        guard = 0
+        while next_date < today and guard < 240:
+            stepped = RecurringService._next_cycle(next_date, cycle)
+            if stepped <= next_date:
+                break
+            next_date = stepped
+            guard += 1
+        return next_date
+
+    @staticmethod
     def get_upcoming_renewals(user_id, days_ahead=30):
         """Return subscriptions for a user with days left until next billing."""
         res = db.execute(
@@ -78,6 +90,8 @@ class RecurringService:
             sid, name, amount, cycle, next_date_str = row[0], row[1], row[2], row[3], row[4]
             try:
                 next_date = datetime.strptime(next_date_str, "%Y-%m-%d").date()
+                # Roll past renewal dates forward to the next upcoming cycle date
+                next_date = RecurringService._project_next_date(next_date, cycle, today)
                 days_left = (next_date - today).days
                 if 0 <= days_left <= days_ahead:
                     alerts.append({

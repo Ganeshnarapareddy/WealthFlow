@@ -221,7 +221,7 @@ class LoanService:
             SELECT p.id, l.person_name, p.amount, l.loan_type, p.due_date, l.remaining_amount, l.id as loan_id
             FROM loan_payments p
             JOIN loans l ON p.loan_id = l.id
-            WHERE l.user_id = ? AND p.status = 'pending' AND p.due_date <= date('now', '+' || ? || ' days')
+            WHERE l.user_id = ? AND l.emi_active = 1 AND p.status = 'pending' AND p.due_date <= date('now', '+' || ? || ' days')
             ORDER BY p.due_date ASC
         """, (user_id, days))
         

@@ -25,6 +25,7 @@ from services.auth_service import AuthService
 from services.trip_service import TripService
 
 # --- LOGO HELPER ---
+@st.cache_data
 def get_base64_logo():
     logo_path = os.path.join("assets", "logo.png")
     if os.path.exists(logo_path):
@@ -68,21 +69,21 @@ if not st.session_state.user:
             st.session_state.user = user_data
             st.rerun()
 
-# AUTO-REPAIR: Database integrity fixes
-try:
-    # Trim usernames
-    db.execute("UPDATE wf_users SET username = TRIM(username)")
-    # Set Master Admin ID and update current session
-    db.execute("UPDATE wf_users SET short_id = '00001' WHERE role = 'admin' AND (short_id IS NULL OR short_id = 'None')")
-    if st.session_state.get('user') and st.session_state.user['role'] == 'admin':
-        if st.session_state.user.get('short_id') in [None, 'None']:
-            st.session_state.user['short_id'] = '00001'
-except Exception:
-    pass
+# AUTO-REPAIR: Database integrity fixes (once per session for fast reruns)
+if not st.session_state.get('_db_repaired'):
+    try:
+        db.execute("UPDATE wf_users SET username = TRIM(username)")
+        db.execute("UPDATE wf_users SET short_id = '00001' WHERE role = 'admin' AND (short_id IS NULL OR short_id = 'None')")
+        if st.session_state.get('user') and st.session_state.user['role'] == 'admin':
+            if st.session_state.user.get('short_id') in [None, 'None']:
+                st.session_state.user['short_id'] = '00001'
+    except Exception:
+        pass
+    st.session_state['_db_repaired'] = True
 
 # Import UI Components
 from components.styles import apply_styles
-from components.ui_elements import card_metric, section_header, empty_state
+from components.ui_elements import card_metric, section_header, empty_state, stat_strip, style_plotly
 from components.sidebar import render_sidebar
 
 # Constants
@@ -101,119 +102,87 @@ if LOGO_B64:
     st.markdown(f'<link rel="apple-touch-icon" href="{LOGO_B64}">', unsafe_allow_html=True)
 
 # --- GLOBAL STYLES — handled by components/styles.py token system ---
+apply_styles()
 
 # --- AUTHENTICATION ---
 def login_page():
-    st.markdown("""<style>
-        .auth-container {
-            max-width: 400px;
-            margin: 5vh auto;
-            padding: 2.5rem;
-            background: rgba(15, 23, 42, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 24px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        }
-        .auth-logo { font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem; }
-        .auth-logo img { width: 80px; margin-bottom: 10px; mix-blend-mode: screen; border-radius: 12px; }
-        
-        @media (max-width: 768px) {
-            .auth-container {
-                margin-top: 0vh !important;
-                position: relative !important;
-                top: -2vh !important;
-                padding: 1.2rem !important;
-                max-width: 95%;
-            }
-            .auth-logo { 
-                font-size: 1.6rem !important; 
-                margin-bottom: 0.1rem !important;
-            }
-            .auth-logo img {
-                width: 45px !important;
-                margin-bottom: 2px !important;
-            }
-        }
-    </style>""", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1.2, 1.6, 1.2])
     with col2:
-        logo_html = f'<img src="{LOGO_B64}">' if LOGO_B64 else "💎"
-        st.markdown(f'<div class="auth-container"><div class="auth-logo">{logo_html}<br>WealthFlow</div>', unsafe_allow_html=True)
-        
-        tab_login, tab_signup, tab_forgot = st.tabs(["Login", "Signup", "Reset"])
-        
-        with tab_login:
-            user_in = st.text_input("Username", key="l_user")
-            pass_in = st.text_input("Password", type="password", key="l_pass")
-            l_remember = st.checkbox("Remember me for 30 days", value=True, key="l_remember")
-            if st.button("Login", use_container_width=True, type="primary"):
-                user = AuthService.login(user_in.strip(), pass_in)
-                if user:
-                    st.session_state.user = user
-                    if l_remember:
-                        token = AuthService.create_session(user['id'])
-                        cookies['wealthflow_remember_token'] = token
-                        cookies.save()
-                        # Backup to localStorage for mobile PWA persistence
-                        st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
-                    # Load saved currency preference
-                    saved_sym = FinanceService.get_setting('currency_symbol', '₹', user['id'])
-                    st.session_state['sym'] = saved_sym
-                    # ULTIMATE SAFETY: Only allow the admin account to trigger the data repair/claim logic.
-                    if user['username'] == 'admin':
-                        FinanceService.repair_legacy_data(user['id'])
-                    st.rerun()
-                else:
-                    st.error("Invalid username or password")
-                    
-        with tab_signup:
-            s_user = st.text_input("Choose Username", key="s_user")
-            s_pass = st.text_input("Choose Password", type="password", key="s_pass")
-            s_email = st.text_input("Email", key="s_email")
-            s_phone = st.text_input("Phone Number", key="s_phone")
-            s_remember = st.checkbox("Remember me for 30 days", value=True, key="s_remember")
-            st.info("💡 Providing Email or Phone ensures your data can be recovered if you delete your account.")
-            if st.button("Create Account", use_container_width=True):
-                if not s_email and not s_phone:
-                    st.error("Email or Phone is mandatory for account recovery.")
-                elif len(s_user) < 3 or len(s_pass) < 6:
-                    st.warning("Username must be >= 3 and Password >= 6 characters")
-                else:
-                    uid_res = AuthService.signup(s_user.strip(), s_pass, s_email, s_phone)
-                    if isinstance(uid_res, str) and len(uid_res) > 30:
-                        user = AuthService.login(s_user.strip(), s_pass)
-                        if user:
-                            st.session_state.user = user
-                            if s_remember:
-                                token = AuthService.create_session(user['id'])
-                                cookies['wealthflow_remember_token'] = token
-                                cookies.save()
-                                # Backup to localStorage for mobile PWA persistence
-                                st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
-                            st.rerun()
+        with st.container(border=True):
+            logo_html = f'<img src="{LOGO_B64}" alt="WealthFlow">' if LOGO_B64 else '<span class="wf-rail-logo-fallback">W</span>'
+            st.markdown(f'<div class="auth-logo">{logo_html}<div>WealthFlow</div></div>', unsafe_allow_html=True)
+
+            tab_login, tab_signup, tab_forgot = st.tabs(["Sign in", "Create account", "Reset password"])
+
+            with tab_login:
+                user_in = st.text_input("Username", key="l_user")
+                pass_in = st.text_input("Password", type="password", key="l_pass")
+                l_remember = st.checkbox("Remember me for 30 days", value=True, key="l_remember")
+                if st.button("Sign in", use_container_width=True, type="primary"):
+                    user = AuthService.login(user_in.strip(), pass_in)
+                    if user:
+                        st.session_state.user = user
+                        if l_remember:
+                            token = AuthService.create_session(user['id'])
+                            cookies['wealthflow_remember_token'] = token
+                            cookies.save()
+                            # Backup to localStorage for mobile PWA persistence
+                            st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
+                        # Load saved currency preference
+                        saved_sym = FinanceService.get_setting('currency_symbol', '₹', user['id'])
+                        st.session_state['sym'] = saved_sym
+                        # ULTIMATE SAFETY: Only allow the admin account to trigger the data repair/claim logic.
+                        if user['username'] == 'admin':
+                            FinanceService.repair_legacy_data(user['id'])
+                        st.rerun()
                     else:
-                        st.error(str(uid_res))
-                        
-        with tab_forgot:
-            st.markdown("### 🔐 Secure Recovery")
-            st.caption("Enter your registered Email or Phone to reset your password.")
-            f_contact = st.text_input("Registered Email or Phone", key="f_contact")
-            f_pass = st.text_input("New Password", type="password", key="f_pass")
-            if st.button("Verify & Reset Password", use_container_width=True):
-                if not f_contact:
-                    st.error("Please enter your contact info.")
-                else:
-                    from database import db
-                    # Find user by email or phone
-                    res = db.execute("SELECT id FROM wf_users WHERE (email = ? OR phone = ?) AND status = 'active'", (f_contact, f_contact))
-                    if res and res.rows:
-                        AuthService.update_password(res.rows[0][0], f_pass)
-                        st.success("Password updated successfully! Please login.")
+                        st.error("Invalid username or password")
+
+            with tab_signup:
+                s_user = st.text_input("Choose Username", key="s_user")
+                s_pass = st.text_input("Choose Password", type="password", key="s_pass")
+                s_email = st.text_input("Email", key="s_email")
+                s_phone = st.text_input("Phone Number", key="s_phone")
+                s_remember = st.checkbox("Remember me for 30 days", value=True, key="s_remember")
+                st.info("Providing an email or phone number ensures your data can be recovered if needed.")
+                if st.button("Create Account", use_container_width=True, type="primary"):
+                    if not s_email and not s_phone:
+                        st.error("Email or Phone is mandatory for account recovery.")
+                    elif len(s_user) < 3 or len(s_pass) < 6:
+                        st.warning("Username must be >= 3 and Password >= 6 characters")
                     else:
-                        st.error("Contact information not found.")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+                        uid_res = AuthService.signup(s_user.strip(), s_pass, s_email, s_phone)
+                        if isinstance(uid_res, str) and len(uid_res) > 30:
+                            user = AuthService.login(s_user.strip(), s_pass)
+                            if user:
+                                st.session_state.user = user
+                                if s_remember:
+                                    token = AuthService.create_session(user['id'])
+                                    cookies['wealthflow_remember_token'] = token
+                                    cookies.save()
+                                    # Backup to localStorage for mobile PWA persistence
+                                    st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
+                                st.rerun()
+                        else:
+                            st.error(str(uid_res))
+
+            with tab_forgot:
+                st.markdown("#### Account recovery")
+                st.caption("Enter your registered email or phone to reset your password.")
+                f_contact = st.text_input("Registered Email or Phone", key="f_contact")
+                f_pass = st.text_input("New Password", type="password", key="f_pass")
+                if st.button("Verify & Reset Password", use_container_width=True, type="primary"):
+                    if not f_contact:
+                        st.error("Please enter your contact info.")
+                    else:
+                        from database import db
+                        # Find user by email or phone
+                        res = db.execute("SELECT id FROM wf_users WHERE (email = ? OR phone = ?) AND status = 'active'", (f_contact, f_contact))
+                        if res and res.rows:
+                            AuthService.update_password(res.rows[0][0], f_pass)
+                            st.success("Password updated. You can now sign in.")
+                        else:
+                            st.error("Contact information not found.")
 
 # Auth Check
 if not st.session_state.user:
@@ -259,8 +228,6 @@ if 'trip_advance_added' not in st.session_state: st.session_state['trip_advance_
 if 'trip_member_added' not in st.session_state: st.session_state['trip_member_added'] = False
 if 'edit_member_id' not in st.session_state: st.session_state['edit_member_id'] = None
 
-apply_styles()
-
 # --- SIDEBAR NAVIGATION ---
 render_sidebar(st.session_state.user, LOGO_B64, FinanceService, AuthService, cookies)
 
@@ -278,14 +245,14 @@ def render_delete_button(item_id, button_key, delete_func, user_id, item_name="i
         st.session_state['delete_confirm'][conf_key] = False
 
     if not st.session_state['delete_confirm'][conf_key]:
-        if st.button("🗑️", key=button_key):
+        if st.button("", icon=":material/delete_outline:", help=f"Delete {item_name}", key=button_key):
             st.session_state['delete_confirm'][conf_key] = True
             st.rerun()
     else:
         st.warning(f"Delete {item_name}?")
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("✅ Yes", key=f"yes_{item_id}"):
+            if st.button("Yes", icon=":material/check:", type="primary", key=f"yes_{item_id}"):
                 delete_func(item_id, user_id)
                 st.session_state['delete_confirm'][conf_key] = False
                 # Set delete flag for popup
@@ -294,7 +261,7 @@ def render_delete_button(item_id, button_key, delete_func, user_id, item_name="i
                 elif "del_c_txn_" in button_key: st.session_state['card_txn_deleted'] = True
                 st.rerun()
         with c2:
-            if st.button("❌ No", key=f"no_{item_id}"):
+            if st.button("No", icon=":material/close:", key=f"no_{item_id}"):
                 st.session_state['delete_confirm'][conf_key] = False
                 st.rerun()
 
@@ -438,51 +405,60 @@ if page == "Dashboard":
         prev_burn = RecurringService.get_monthly_recurring_total_for_period(uid, prev_year, prev_month)
         burn_delta_str, burn_increased = FinanceService.get_comparison_delta(burn, prev_burn)
 
-    m1, m2, m3, m4 = st.columns([1, 1, 1, 1])
-    with m1: card_metric("Net Worth", fmt(net))
-    with m2: card_metric("Today's Spent", fmt(today_spent),
-                        delta=f"{day_pct:+.1f}%" if yesterday_spent > 0 else None,
-                        delta_color="inverse")
-    with m3: card_metric("Monthly Income", fmt(inc),
-                        delta=inc_delta_str,
-                        delta_color="normal")
-    with m4: card_metric("Monthly Spent", fmt(exp),
-                        delta=exp_delta_str,
-                        delta_color="inverse")
+    # Primary KPI Strip — Hallmark hairline-divided row (no card wall)
+    day_tone = "negative" if day_pct > 0 else ("positive" if day_pct < 0 else "neutral")
+    inc_tone = "positive" if inc_increased else ("negative" if inc_delta_str else "neutral")
+    exp_tone = "negative" if exp_increased else ("positive" if exp_delta_str else "neutral")
+    sr_tone = "positive" if sr_increased else ("negative" if sr_delta_str else "neutral")
+    burn_tone = "negative" if burn_increased else ("positive" if burn_delta_str else "neutral")
+    sub_delta = f"{burn_delta_str} ({active_subs_count} active)" if burn_delta_str else f"{active_subs_count} active"
 
-    # Second row - Additional Analytics
-    a1, a2, a3 = st.columns([1, 1, 1])
-    with a1: card_metric("Savings Rate", f"{savings_rate:.1f}%",
-                         delta=sr_delta_str,
-                         delta_color="normal")
-    with a2: card_metric("Total EMI per Month", fmt(total_emi_amt),
-                         delta=f"{active_emi_count} Active")
-    with a3: 
-        sub_delta = f"{burn_delta_str} ({active_subs_count} Active)" if burn_delta_str else f"{active_subs_count} Active"
-        card_metric("Total Subscriptions per month", fmt(burn) if burn > 0 else "N/A",
-                         delta=sub_delta,
-                         delta_color="inverse")
+    stat_strip([
+        {"label": "Net worth", "value": fmt(net), "delta": None, "tone": "neutral"},
+        {
+            "label": "Today's spend",
+            "value": fmt(today_spent),
+            "delta": f"{day_pct:+.1f}%" if yesterday_spent > 0 else None,
+            "tone": day_tone,
+        },
+        {"label": "Monthly income", "value": fmt(inc), "delta": inc_delta_str, "tone": inc_tone},
+        {"label": "Monthly spend", "value": fmt(exp), "delta": exp_delta_str, "tone": exp_tone},
+    ])
+
+    # Secondary KPI Strip — Savings, EMIs & Recurring
+    stat_strip([
+        {"label": "Savings rate", "value": f"{savings_rate:.1f}%", "delta": sr_delta_str, "tone": sr_tone},
+        {"label": "Monthly EMI", "value": fmt(total_emi_amt), "delta": f"{active_emi_count} active", "tone": "accent"},
+        {
+            "label": "Monthly subscriptions",
+            "value": fmt(burn) if burn > 0 else "N/A",
+            "delta": sub_delta,
+            "tone": burn_tone,
+        },
+    ])
 
     # --- Credit Card Summary ---
     st.markdown("---")
     df_cards = CreditCardService.get_cards(uid)
-    st.markdown("#### 💳 Credit Card Statistics")
+    section_header("Credit card utilization", "Combined limit and current statement balance")
     if not df_cards.empty:
         total_limit = df_cards['card_limit'].sum()
         total_outstanding = df_cards['current_balance'].sum()
         total_available = total_limit + total_outstanding
         utilization = (-total_outstanding / total_limit * 100) if total_limit > 0 else 0
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Limit", fmt(total_limit))
-        c2.metric("Outstanding", fmt(total_outstanding), delta=f"{utilization:.1f}% Use", delta_color="inverse")
-        c3.metric("Available", fmt(total_available))
+        util_tone = "negative" if utilization > 50 else ("accent" if utilization > 25 else "positive")
+
+        stat_strip([
+            {"label": "Total limit", "value": fmt(total_limit)},
+            {"label": "Outstanding", "value": fmt(total_outstanding), "delta": f"{utilization:.1f}% used", "tone": util_tone},
+            {"label": "Available credit", "value": fmt(total_available), "tone": "positive"},
+        ])
         st.progress(max(0.0, min(1.0, utilization/100)))
     else:
-        st.info("No credit cards tracked yet.")
+        empty_state("No credit cards yet", "Add your first card in Credit Cards to track utilization here.", icon="wallet")
 
     # Smart Alerts Section
-    st.markdown("### 🔔 Smart Alerts")
+    section_header("Upcoming dues & alerts", "Renewals, EMIs, loans, and bills due within 30 days")
 
     # Consolidate all alerts
     all_alerts = []
@@ -593,36 +569,35 @@ if page == "Dashboard":
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Dashboard Tabs
-    t_sp, t_dy, t_ie, t_tr, t_we, t_bu = st.tabs(["📊 Category", "📅 Daily", "📊 Income/Expense", "📈 Trend", "💰 Wealth", "🔥 Burn"])
+    t_sp, t_dy, t_ie, t_tr, t_we, t_bu = st.tabs(["Category", "Daily", "Income & Expense", "Trend", "Wealth", "Budget Burn"])
     with t_sp:
         df_sp = FinanceService.get_spending_by_category(uid, sel_year, sel_month, start_day=fiscal_start_day or 1)
         if not df_sp.empty:
             fig = px.bar(df_sp, x='Category', y='Amount', color='Category', text_auto='.2f')
-            # Dynamic width to ensure readability with many categories and space between each bar
-            chart_width = max(800, len(df_sp) * 120) 
+            # Dynamic width with generous right & bottom margin so every bar & label stays inside the box
+            chart_width = max(920, len(df_sp) * 86)
+            max_sp = float(df_sp['Amount'].max()) if not df_sp.empty else 100.0
+            style_plotly(fig, show_legend=False)
             fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                font_color="#e2e8f0", showlegend=False,
-                margin=dict(t=30,b=20,l=0,r=0),
+                margin=dict(t=40, b=95, l=20, r=56),
+                height=440,
                 width=chart_width,
-                xaxis=dict(fixedrange=True), yaxis=dict(fixedrange=True),
-                bargap=0.5
+                xaxis=dict(fixedrange=True, tickangle=-32, automargin=True, title=None),
+                yaxis=dict(fixedrange=True, range=[0, max_sp * 1.16]),
+                bargap=0.42,
             )
-            fig.update_traces(textfont_color='white', textposition='outside')
-            
-            st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
+            fig.update_traces(textfont_color='#EAECEF', textposition='outside', cliponaxis=False, marker_cornerradius=6)
             st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': False})
-            st.markdown('</div>', unsafe_allow_html=True)
-        else: empty_state("No Data", "No spending data available.")
+        else: empty_state("No spending data", "Transactions for this period will appear here.", icon="chart")
 
     with t_dy:
-        c1, c2 = st.columns([1, 2])
+        c1, c2, c3 = st.columns([1.1, 1, 1.4])
         with c1:
             if 'dy_month_mode' not in st.session_state:
                 st.session_state['dy_month_mode'] = st.session_state.get('month_mode', "Calendar")
-                
+
             dy_mode = st.radio(
-                "Filter by:", ["Calendar", "Fiscal"], 
+                "Filter by:", ["Calendar", "Fiscal"],
                 index=0 if st.session_state['dy_month_mode'] == "Calendar" else 1,
                 horizontal=True, key="dy_month_mode_radio"
             )
@@ -631,10 +606,23 @@ if page == "Dashboard":
                 st.rerun()
 
         with c2:
+            if 'dy_sel_year' not in st.session_state:
+                st.session_state['dy_sel_year'] = sel_year
+            try:
+                dy_year_idx = year_options.index(str(st.session_state['dy_sel_year']))
+            except ValueError:
+                dy_year_idx = 0
+            dy_year_str = st.selectbox("Select Year", year_options, index=dy_year_idx, key="dy_year_sel")
+            dy_sel_year = "All" if dy_year_str == "All" else int(dy_year_str)
+            if dy_sel_year != st.session_state['dy_sel_year']:
+                st.session_state['dy_sel_year'] = dy_sel_year
+                st.rerun()
+
+        with c3:
             if 'dy_sel_month' not in st.session_state:
                 st.session_state['dy_sel_month'] = st.session_state.get('selected_month', "All")
 
-            lbl_year = sel_year if sel_year != "All" else datetime.now().year
+            lbl_year = dy_sel_year if dy_sel_year != "All" else datetime.now().year
 
             if dy_mode == "Fiscal":
                 dy_fiscal_day_val = int(FinanceService.get_setting('fiscal_month_start_day', '1', uid))
@@ -644,12 +632,12 @@ if page == "Dashboard":
                     label = FinanceService.get_fiscal_month_label(lbl_year, m, dy_fiscal_day_val)
                     month_options.append(label)
                     month_map.append(m)
-                
+
                 try:
                     idx = month_map.index(st.session_state['dy_sel_month']) if st.session_state['dy_sel_month'] != "All" else 0
                 except ValueError:
                     idx = 0
-                
+
                 sel_label = st.selectbox("Select Month", month_options, index=idx, key="dy_month_sel")
                 dy_sel_month = "All" if sel_label == "All" else month_map[month_options.index(sel_label)]
             else:
@@ -660,13 +648,13 @@ if page == "Dashboard":
                     idx = 0
                 sel_label = st.selectbox("Select Month", month_display, index=idx, key="dy_month_sel")
                 dy_sel_month = "All" if sel_label == "All" else month_display.index(sel_label)
-            
+
             if dy_sel_month != st.session_state['dy_sel_month']:
                 st.session_state['dy_sel_month'] = dy_sel_month
                 st.rerun()
 
         dy_fiscal_start = int(FinanceService.get_setting('fiscal_month_start_day', '1', uid)) if dy_mode == "Fiscal" else 1
-        df_dy_full = FinanceService.get_daily_spending_by_category(uid, sel_year, dy_sel_month, start_day=dy_fiscal_start)
+        df_dy_full = FinanceService.get_daily_spending_by_category(uid, dy_sel_year, dy_sel_month, start_day=dy_fiscal_start)
         if not df_dy_full.empty:
             # Add dynamic category filter
             all_cat_names = sorted(df_dy_full['Category'].unique().tolist())
@@ -683,17 +671,17 @@ if page == "Dashboard":
                 df_dy['Date'] = pd.to_datetime(df_dy['Date']).dt.strftime('%Y-%m-%d')
                 df_dy = df_dy.sort_values('Date', ascending=False)
                 
-                if sel_year != "All" and dy_sel_month != "All":
-                    start_date = datetime(int(sel_year), dy_sel_month, dy_fiscal_start).date()
+                if dy_sel_year != "All" and dy_sel_month != "All":
+                    start_date = datetime(int(dy_sel_year), dy_sel_month, dy_fiscal_start).date()
                     import calendar
                     if dy_mode == "Fiscal":
                         if dy_sel_month == 12:
-                            end_date = datetime(int(sel_year) + 1, 1, dy_fiscal_start).date() - timedelta(days=1)
+                            end_date = datetime(int(dy_sel_year) + 1, 1, dy_fiscal_start).date() - timedelta(days=1)
                         else:
-                            end_date = datetime(int(sel_year), dy_sel_month + 1, dy_fiscal_start).date() - timedelta(days=1)
+                            end_date = datetime(int(dy_sel_year), dy_sel_month + 1, dy_fiscal_start).date() - timedelta(days=1)
                     else:
-                        _, last_day = calendar.monthrange(int(sel_year), dy_sel_month)
-                        end_date = datetime(int(sel_year), dy_sel_month, last_day).date()
+                        _, last_day = calendar.monthrange(int(dy_sel_year), dy_sel_month)
+                        end_date = datetime(int(dy_sel_year), dy_sel_month, last_day).date()
                     
                     full_date_range = pd.date_range(start_date, end_date).strftime('%Y-%m-%d').tolist()
                     cat_order = full_date_range[::-1]
@@ -701,40 +689,76 @@ if page == "Dashboard":
                     cat_order = df_dy['Date'].unique().tolist()
                 
                 unique_days = len(cat_order)
-                
-                # Ensure each daily bar has at least 80px space, with a minimum overall width of 800px
-                dynamic_width = max(800, unique_days * 80)
-                bar_gap = 0.5
-                
-                st_colors = ['#0068c9', '#83c9ff', '#ff2b2b', '#ffabab', '#29b09d', '#7defa1', '#ff8700', '#ffd16a', '#6d3fc0', '#d5dae5']
-                fig_dy = px.bar(df_dy, x='Date', y='Amount', color='Category', 
-                                title=None,
-                                labels={'Amount': f'Amount ({st.session_state["sym"]})'},
-                                barmode='stack',
-                                color_discrete_sequence=st_colors)
-                
-                # Disable modebar and standard plotly drag behavior
-                fig_dy.update_layout(dragmode=False)
-                
+
+                # Build top year/period badge + compact day-only bottom ticks (zero overlap)
+                parsed_dates = [datetime.strptime(d, '%Y-%m-%d') for d in cat_order]
+                years_present = sorted({d.year for d in parsed_dates})
+                months_present = list(dict.fromkeys(d.strftime('%b') for d in reversed(parsed_dates)))
+                if len(years_present) == 1:
+                    if len(months_present) == 1:
+                        period_label = f"{months_present[0]} {years_present[0]}"
+                    else:
+                        period_label = f"{years_present[0]} — {months_present[0]} to {months_present[-1]}"
+                else:
+                    period_label = f"{years_present[0]} – {years_present[-1]}"
+
+                st.markdown(f'<div class="wf-chart-period">{period_label}</div>', unsafe_allow_html=True)
+
+                single_month = len({(d.year, d.month) for d in parsed_dates}) == 1
+                short_ticks = []
+                prev_ym = None
+                for d in parsed_dates:
+                    ym = (d.year, d.month)
+                    day_str = str(d.day)
+                    if not single_month and ym != prev_ym:
+                        short_ticks.append(f"{day_str}<br><span style='font-size:10px;color:#7C8798'>{d.strftime('%b')}</span>")
+                    else:
+                        short_ticks.append(day_str)
+                    prev_ym = ym
+
+                # Generous per-day spacing so numbers & bars breathe cleanly
+                dynamic_width = max(880, unique_days * 60)
+                bar_gap = 0.38
+
+                st_colors = ['#4F86F7', '#44C786', '#F06B66', '#E8B84B', '#55B7B7', '#9B87F5', '#F2994A', '#6EC5E9', '#D97B93', '#A3B1C6']
+                cat_list = list(dict.fromkeys(df_dy['Category'].tolist()))
+                color_map = {cat: st_colors[i % len(st_colors)] for i, cat in enumerate(cat_list)}
+
+                fig_dy = px.bar(
+                    df_dy,
+                    x='Date',
+                    y='Amount',
+                    color='Category',
+                    title=None,
+                    labels={'Amount': f'Amount ({st.session_state["sym"]})'},
+                    barmode='stack',
+                    color_discrete_map=color_map,
+                )
+
+                # Disable Plotly's cramped horizontal legend — render a clean wrapping HTML legend below
+                style_plotly(fig_dy, show_legend=False)
                 fig_dy.update_layout(
-                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    font_color="#e2e8f0",
-                    margin=dict(t=30,b=40,l=0,r=0), # Increased bottom margin for dates
-                    height=450,
+                    dragmode=False,
+                    margin=dict(t=28, b=56, l=48, r=32),
+                    height=390,
                     width=dynamic_width,
                     xaxis=dict(
-                        type='category', 
-                        title=None, 
-                        fixedrange=True, # No panning inside plot
+                        type='category',
+                        title=None,
+                        fixedrange=True,
                         tickangle=0,
                         categoryorder='array',
-                        categoryarray=cat_order
+                        categoryarray=cat_order,
+                        tickmode='array',
+                        tickvals=cat_order,
+                        ticktext=short_ticks,
+                        tickfont=dict(size=12, color='#B3BBC9'),
                     ),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
-                    bargap=bar_gap  # Empty space between each day
+                    yaxis=dict(fixedrange=True),
+                    bargap=bar_gap,
                 )
-                
+                fig_dy.update_traces(marker_cornerradius=4)
+
                 # Add totals on top of bars
                 totals = df_dy.groupby('Date')['Amount'].sum().reset_index()
                 fig_dy.add_trace(go.Scatter(
@@ -745,68 +769,160 @@ if page == "Dashboard":
                     textposition='top center',
                     showlegend=False,
                     hoverinfo='skip',
-                    textfont=dict(color='#94a3b8', size=11)
+                    textfont=dict(family="Geist, system-ui, sans-serif", color='#CBD5E1', size=11),
                 ))
-                
+
                 # Ensure Y-axis has room for labels
                 max_y = totals['Amount'].max() if not totals.empty else 100
-                fig_dy.update_yaxes(range=[0, max_y * 1.15])
-                
-                import streamlit.components.v1 as components
+                fig_dy.update_yaxes(range=[0, max_y * 1.18])
+
                 raw_html = fig_dy.to_html(include_plotlyjs="cdn", config={'displayModeBar': False}, full_html=False)
-                # Inject CSS to remove body margin, hide vertical scrollbar, and style horizontal scrollbar
+                import html as _html_esc
+                legend_items_html = "".join(
+                    f'<span class="wf-leg-item">'
+                    f'<span class="wf-leg-dot" style="background:{color_map[c]};"></span>'
+                    f'<span>{_html_esc.escape(str(c))}</span>'
+                    f'</span>'
+                    for c in cat_list
+                )
                 styled_html = f"""
+                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
                 <style>
-                    body {{ 
-                        margin: 0; padding: 0; overflow-y: hidden; 
+                    html, body {{
+                        margin: 0;
+                        padding: 0;
+                        background: transparent;
+                        color: #EAECEF;
+                        font-family: 'Geist', system-ui, sans-serif;
+                        overflow: hidden;
                     }}
-                    /* Custom sleek horizontal scrollbar */
-                    ::-webkit-scrollbar {{ height: 8px; }}
-                    ::-webkit-scrollbar-track {{ background: rgba(255, 255, 255, 0.05); border-radius: 4px; }}
-                    ::-webkit-scrollbar-thumb {{ background: rgba(255, 255, 255, 0.2); border-radius: 4px; }}
-                    ::-webkit-scrollbar-thumb:hover {{ background: rgba(255, 255, 255, 0.3); }}
+                    .wf-dy-outer {{
+                        background: #141A24;
+                        border: 1px solid rgba(255, 255, 255, 0.08);
+                        border-radius: 16px;
+                        padding: 8px 14px 14px 14px;
+                        box-sizing: border-box;
+                    }}
+                    .wf-dy-scroll {{
+                        overflow-x: auto;
+                        overflow-y: hidden;
+                        scroll-behavior: smooth;
+                        padding-bottom: 6px;
+                    }}
+                    .wf-dy-scroll::-webkit-scrollbar {{ height: 6px; }}
+                    .wf-dy-scroll::-webkit-scrollbar-track {{ background: transparent; border-radius: 999px; }}
+                    .wf-dy-scroll::-webkit-scrollbar-thumb {{ background: rgba(148, 163, 184, 0.32); border-radius: 999px; }}
+                    .wf-dy-scroll::-webkit-scrollbar-thumb:hover {{ background: rgba(148, 163, 184, 0.5); }}
+                    .wf-dy-legend {{
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px 16px;
+                        padding-top: 12px;
+                        margin-top: 8px;
+                        border-top: 1px solid rgba(255, 255, 255, 0.08);
+                    }}
+                    .wf-leg-item {{
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 6px;
+                        font-size: 12px;
+                        color: #B3BBC9;
+                        white-space: nowrap;
+                    }}
+                    .wf-leg-dot {{
+                        width: 10px;
+                        height: 10px;
+                        border-radius: 3px;
+                        flex-shrink: 0;
+                    }}
                 </style>
-                {raw_html}
+                <div class="wf-dy-outer">
+                    <div class="wf-dy-scroll">{raw_html}</div>
+                    <div class="wf-dy-legend">{legend_items_html}</div>
+                </div>
                 """
-                components.html(styled_html, height=500, scrolling=True)
+                # Dynamic iframe height based on legend rows so nothing clips
+                legend_rows = max(1, (len(cat_list) + 6) // 7)
+                components.html(styled_html, height=430 + legend_rows * 26, scrolling=False)
             else:
                 empty_state("No Data", "No spending data for selected categories.")
         else: empty_state("No Data", "No daily spending data available.")
 
     with t_ie:
-        df_ie = FinanceService.get_income_expense_by_month(uid, sel_year, sel_month)
+        ie_c1, ie_c2 = st.columns([1, 1])
+        with ie_c1:
+            if 'ie_sel_year' not in st.session_state:
+                st.session_state['ie_sel_year'] = sel_year
+            try:
+                ie_year_idx = year_options.index(str(st.session_state['ie_sel_year']))
+            except ValueError:
+                ie_year_idx = 0
+            ie_year_str = st.selectbox("Select Year", year_options, index=ie_year_idx, key="ie_year_sel")
+            ie_sel_year = "All" if ie_year_str == "All" else int(ie_year_str)
+            if ie_sel_year != st.session_state['ie_sel_year']:
+                st.session_state['ie_sel_year'] = ie_sel_year
+                st.rerun()
+
+        with ie_c2:
+            ie_month_display = ["All", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            if 'ie_sel_month' not in st.session_state:
+                st.session_state['ie_sel_month'] = sel_month
+            try:
+                ie_m_idx = int(st.session_state['ie_sel_month']) if st.session_state['ie_sel_month'] != "All" else 0
+            except ValueError:
+                ie_m_idx = 0
+            ie_m_label = st.selectbox("Select Month", ie_month_display, index=ie_m_idx, key="ie_month_sel")
+            ie_sel_month = "All" if ie_m_label == "All" else ie_month_display.index(ie_m_label)
+            if ie_sel_month != st.session_state['ie_sel_month']:
+                st.session_state['ie_sel_month'] = ie_sel_month
+                st.rerun()
+
+        df_ie = FinanceService.get_income_expense_by_month(uid, ie_sel_year, ie_sel_month)
         if not df_ie.empty:
+            # Format YYYY-MM into crisp readable month labels (e.g., "Apr 2026")
+            def _fmt_ym(val):
+                try:
+                    return datetime.strptime(str(val), "%Y-%m").strftime("%b %Y")
+                except Exception:
+                    return str(val)
+
+            ie_labels = [_fmt_ym(m) for m in df_ie['Month']]
+            max_ie = float(max(df_ie['Income'].max(), df_ie['Expense'].max(), 100.0))
+
             fig_ie = go.Figure(data=[
-                go.Bar(name='Income', x=df_ie['Month'], y=df_ie['Income'], marker_color='#4ade80', text=df_ie['Income'], texttemplate='%{text:.2s}', textposition='outside'),
-                go.Bar(name='Expense', x=df_ie['Month'], y=df_ie['Expense'], marker_color='#f87171', text=df_ie['Expense'], texttemplate='%{text:.2s}', textposition='outside')
+                go.Bar(name='Income', x=ie_labels, y=df_ie['Income'], marker_color='#44C786', marker_cornerradius=6, text=df_ie['Income'], texttemplate='%{text:.2s}', textposition='outside', cliponaxis=False),
+                go.Bar(name='Expense', x=ie_labels, y=df_ie['Expense'], marker_color='#F06B66', marker_cornerradius=6, text=df_ie['Expense'], texttemplate='%{text:.2s}', textposition='outside', cliponaxis=False)
             ])
+            style_plotly(fig_ie, show_legend=True)
             fig_ie.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                font_color="#e2e8f0", barmode='group',
-                margin=dict(t=30,b=20,l=0,r=0),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
-                xaxis=dict(fixedrange=True)
+                barmode='group',
+                height=420,
+                margin=dict(t=48, b=56, l=16, r=28),
+                yaxis=dict(fixedrange=True, range=[0, max_ie * 1.18]),
+                xaxis=dict(type='category', title=None, fixedrange=True, automargin=True, tickfont=dict(size=12, color='#B3BBC9')),
+                legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="right", x=1),
             )
             st.plotly_chart(fig_ie, use_container_width=True, config={'displayModeBar': False})
-        else: empty_state("No Data", "Income/expense data will appear here.")
+        else: empty_state("No cash flow data", "Income and expense comparisons will appear here.", icon="chart")
 
     with t_tr:
         df_tr = FinanceService.get_spending_trend(uid, sel_year, sel_month)
         if not df_tr.empty:
+            max_tr = float(df_tr['Amount'].max()) if not df_tr.empty else 100.0
             fig_tr = px.line(df_tr, x='Month', y='Amount', markers=True, text='Amount')
+            style_plotly(fig_tr, show_legend=False)
             fig_tr.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', font_color="#e2e8f0",
-                plot_bgcolor='rgba(255,255,255,0.05)',
-                margin=dict(t=30,b=20,l=0,r=0),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', fixedrange=True),
-                xaxis=dict(fixedrange=True)
+                height=420,
+                margin=dict(t=40, b=56, l=16, r=24),
+                yaxis=dict(fixedrange=True, range=[0, max_tr * 1.18]),
+                xaxis=dict(title=None, fixedrange=True, automargin=True, tickfont=dict(size=12, color='#B3BBC9')),
             )
-            fig_tr.update_traces(line_color='#3b82f6', textposition='top center', texttemplate='%{text:.2s}')
+            fig_tr.update_traces(line_color='#4F86F7', line_width=2.5, marker=dict(size=7), textposition='top center', texttemplate='%{text:.2s}', cliponaxis=False)
             st.plotly_chart(fig_tr, use_container_width=True, config={'displayModeBar': False})
-        else: empty_state("No Data", "Spend trend will appear here.")
-        
+        else: empty_state("No trend data", "Monthly spending trend will appear here.", icon="chart")
+
     with t_we:
-        st.markdown("#### 💰 Wealth Distribution")
+        section_header("Wealth distribution", "Asset allocation across tracked holdings")
         res_assets = db.execute("SELECT type, SUM(value) FROM assets WHERE user_id = ? GROUP BY type", (uid,))
         asset_data = []
         total_assets = 0
@@ -814,31 +930,30 @@ if page == "Dashboard":
             for row in res_assets.rows:
                 asset_data.append({'Category': row[0], 'Amount': row[1]})
                 total_assets += row[1]
-        
+
         # 2. Convert to DataFrame for plotting (excluding Cash & Bank as requested)
         if asset_data:
             wealth_df = pd.DataFrame(asset_data).sort_values(by='Amount', ascending=False)
-            
+
             # Bar chart for wealth distribution
             fig3 = px.bar(
-                wealth_df, 
-                x='Category', 
-                y='Amount', 
+                wealth_df,
+                x='Category',
+                y='Amount',
                 color='Category',
                 text_auto='.2f',
-                color_discrete_sequence=px.colors.qualitative.Pastel
+                color_discrete_sequence=['#4F86F7', '#44C786', '#E8B84B', '#7B93DB', '#55B7B7', '#D97B76']
             )
+            style_plotly(fig3, show_legend=False)
             fig3.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                font_color="#e2e8f0", showlegend=False,
-                margin=dict(t=30,b=20,l=0,r=0),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', title="Amount", fixedrange=True),
-                xaxis=dict(title=None, fixedrange=True)
+                margin=dict(t=30, b=20, l=0, r=0),
+                yaxis=dict(title="Amount", fixedrange=True),
+                xaxis=dict(title=None, fixedrange=True),
             )
-            fig3.update_traces(textfont_color='white', textposition='outside')
+            fig3.update_traces(textfont_color='#EAECEF', textposition='outside', marker_cornerradius=6)
             st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
         else:
-            empty_state("No Assets", "Add your investments in the Assets tab to see the breakdown here.")
+            empty_state("No assets tracked", "Add your investments in Assets to see your allocation here.", icon="wallet")
 
     with t_bu:
         budget_month = sel_month if sel_month != "All" else None
@@ -846,14 +961,23 @@ if page == "Dashboard":
         df_b = BudgetService.get_monthly_budgets(uid, month=budget_month, year=budget_year)
         limit = df_b['Limit'].sum() if not df_b.empty else 0
         if limit > 0:
-            fig4 = go.Figure(go.Indicator(mode="gauge+number", value=exp, gauge={'axis': {'range': [None, limit]}}))
-            fig4.update_layout(paper_bgcolor='rgba(0,0,0,0)', font={'color': "#e2e8f0"})
-            st.plotly_chart(fig4, use_container_width=True)
-        else: empty_state("No Budgets", "Set limits to track burn.")
+            fig4 = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=exp,
+                gauge={
+                    'axis': {'range': [None, limit]},
+                    'bar': {'color': '#4F86F7'},
+                    'bgcolor': '#1A2130',
+                    'borderwidth': 0,
+                }
+            ))
+            style_plotly(fig4, show_legend=False)
+            st.plotly_chart(fig4, use_container_width=True, config={'displayModeBar': False})
+        else: empty_state("No budgets set", "Create monthly limits in Budgets to track burn rate.", icon="chart")
 
 elif page == "Transactions":
     st.markdown('<h1 class="main-header">Ledger</h1>', unsafe_allow_html=True)
-    t1, t2 = st.tabs(["➕ Add Entry", "📜 History"])
+    t1, t2 = st.tabs(["Add entry", "History"])
     
     with t1:
         txn_type = st.radio("Type", ["Expense", "Income"], horizontal=True, key="txn_type_toggle")
@@ -986,7 +1110,7 @@ elif page == "Subscriptions":
         for _, row in df_s.iterrows():
             c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
             with c1:
-                st.markdown(f"**{row['Icon']} {row['Name']}**")
+                st.markdown(f"**{str(row['Icon']).strip()} {str(row['Name']).strip()}**")
                 cycle_display = RecurringService.format_cycle(row['Cycle'])
                 if row['Next Date']:
                     st.caption(f"🔄 {cycle_display} • Renews on {row['Next Date']}")
@@ -1524,7 +1648,7 @@ elif page == "Assets":
             st.divider()
 
 elif page == "TripFlow":
-    st.markdown('<h1 class="main-header">🌴 TripFlow</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">TripFlow</h1>', unsafe_allow_html=True)
 
     # Success / Action Popups
     if st.session_state.get('trip_added'):
