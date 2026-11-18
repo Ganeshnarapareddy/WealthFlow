@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WealthFlow Mobile — Figma Design System & 6-Screen iPhone Prototype (393×852)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* hallmark: v2.0.0 | theme: obsidian-fintech (mobile-pwa) | genre: modern-minimal */
+:root {
+  --m-bg: #090D16;
+  --m-surface-1: #111724;
+  --m-surface-2: #182132;
+  --m-surface-3: #212D42;
+  --m-border: rgba(255,255,255,0.08);
+  --m-border-strong: rgba(255,255,255,0.16);
+  --m-ink-1: #F3F5F8;
+  --m-ink-2: #9CA6B8;
+  --m-ink-3: #69758B;
+  --m-accent: #4F86F7;
+  --m-accent-low: rgba(79,134,247,0.16);
+  --m-accent-glow: rgba(79,134,247,0.32);
+  --m-success: #34D399;
+  --m-success-low: rgba(52,211,153,0.14);
+  --m-danger: #F87171;
+  --m-danger-low: rgba(248,113,113,0.14);
+  --m-warning: #FBBF24;
+  --m-warning-low: rgba(251,191,36,0.14);
+  --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; overflow-x: clip;
+  background: #060910; color: var(--m-ink-1);
+  font-family: var(--font-ui);
+}
+.canvas-bar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  padding: 14px 24px; background: rgba(9,13,22,0.92); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--m-border);
+}
+.canvas-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.badge {
+  font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px;
+  background: var(--m-surface-2); border: 1px solid var(--m-border-strong); color: var(--m-ink-2);
+}
+.badge-accent { background: var(--m-accent-low); border-color: rgba(79,134,247,0.4); color: #8AB4FF; }
+.filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-btn {
+  appearance: none; cursor: pointer; font-family: var(--font-ui); font-size: 13px; font-weight: 500;
+  padding: 6px 12px; border-radius: 8px;
+  background: var(--m-surface-2); border: 1px solid var(--m-border-strong); color: var(--m-ink-2);
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.filter-btn.active { background: var(--m-accent); border-color: var(--m-accent); color: #FFF; font-weight: 600; }
+.filter-btn:focus-visible { outline: 2px solid var(--m-accent); outline-offset: 2px; }
+
+.board {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(393px, 393px));
+  justify-content: center; gap: 36px; padding: 32px 24px 72px;
+}
+.frame-wrap { display: flex; flex-direction: column; gap: 10px; }
+.frame-label {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; color: var(--m-ink-2); padding: 0 4px;
+}
+.frame-label strong { color: var(--m-ink-1); font-weight: 600; }
+.iphone {
+  width: 393px; height: 852px; border-radius: 44px; overflow: hidden;
+  background: var(--m-bg); border: 6px solid #1E2738;
+  box-shadow: 0 28px 64px rgba(0,0,0,0.65);
+  display: flex; flex-direction: column; position: relative;
+}
+.status-bar {
+  height: 44px; padding: 14px 24px 0; display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; font-weight: 600; color: var(--m-ink-1); flex-shrink: 0;
+}
+.island {
+  width: 108px; height: 26px; border-radius: 999px; background: #000;
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+}
+.m-header {
+  height: 48px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--m-border); flex-shrink: 0;
+}
+.m-brand { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.m-logo {
+  width: 28px; height: 28px; border-radius: 8px; background: var(--m-accent-low);
+  border: 1px solid rgba(79,134,247,0.35); color: var(--m-accent);
+  display: grid; place-items: center; font-weight: 700; font-size: 13px;
+}
+.m-hdr-right { display: flex; align-items: center; gap: 8px; }
+.m-pill-sm {
+  height: 30px; padding: 0 10px; border-radius: 999px; background: var(--m-surface-2);
+  border: 1px solid var(--m-border-strong); font-size: 12px; color: var(--m-ink-2);
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.m-avatar {
+  width: 30px; height: 30px; border-radius: 999px; background: var(--m-surface-2);
+  border: 1px solid var(--m-border-strong); display: grid; place-items: center; font-size: 13px;
+}
+.m-body {
+  flex: 1; overflow-y: auto; padding: 14px 14px 86px; display: flex; flex-direction: column; gap: 12px;
+}
+.m-body::-webkit-scrollbar { width: 0; }
+.hero-card {
+  background: var(--m-surface-1); border: 1px solid var(--m-border); border-radius: 16px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.hero-val { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.muted { color: var(--m-ink-2); font-size: 12px; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bar-track { height: 6px; border-radius: 999px; background: var(--m-surface-2); overflow: hidden; display: flex; }
+.bar-in { background: var(--m-success); height: 100%; }
+.bar-out { background: var(--m-danger); height: 100%; }
+.kpi-grid {
+  display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--m-border);
+  padding-top: 10px; gap: 10px;
+}
+.kpi-cell { display: flex; flex-direction: column; gap: 2px; }
+.kpi-num { font-size: 16px; font-weight: 600; }
+.chip { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; width: fit-content; }
+.chip-ok { background: var(--m-success-low); color: var(--m-success); }
+.chip-bad { background: var(--m-danger-low); color: var(--m-danger); }
+.chip-warn { background: var(--m-warning-low); color: var(--m-warning); }
+.chip-acc { background: var(--m-accent-low); color: #8AB4FF; }
+.sec-head { font-size: 14px; font-weight: 600; color: var(--m-ink-1); margin-top: 2px; }
+.alert-row {
+  background: var(--m-surface-1); border: 1px solid var(--m-border); border-left: 3px solid var(--m-danger);
+  border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.alert-row.warn { border-left-color: var(--m-warning); }
+.paid-pill {
+  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--m-border-strong);
+  background: var(--m-surface-2); color: var(--m-ink-1); font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.seg-rail {
+  display: flex; gap: 6px; padding: 5px; background: var(--m-surface-1);
+  border: 1px solid var(--m-border); border-radius: 12px; overflow-x: auto;
+}
+.seg-pill {
+  padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; white-space: nowrap;
+  background: var(--m-surface-2); border: 1px solid var(--m-border-strong); color: var(--m-ink-2);
+}
+.seg-pill.active {
+  background: var(--m-accent); border-color: var(--m-accent); color: #FFF; font-weight: 600;
+  box-shadow: 0 2px 10px var(--m-accent-glow);
+}
+.hbar-list { display: flex; flex-direction: column; gap: 9px; background: var(--m-surface-1); border: 1px solid var(--m-border); border-radius: 14px; padding: 12px; }
+.hbar-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.hbar-fill { height: 7px; border-radius: 999px; background: var(--m-accent); }
+.input-box {
+  height: 46px; border-radius: 12px; background: var(--m-surface-2); border: 1px solid var(--m-border-strong);
+  padding: 0 14px; display: flex; align-items: center; justify-content: space-between;
+  font-size: 16px; color: var(--m-ink-1);
+}
+.input-box.placeholder { color: var(--m-ink-3); }
+.amount-big {
+  height: 64px; font-size: 28px; font-weight: 700; font-family: var(--font-mono);
+}
+.cta-btn {
+  height: 48px; border-radius: 12px; background: var(--m-accent); color: #FFF;
+  font-size: 15px; font-weight: 600; display: grid; place-items: center;
+  box-shadow: 0 4px 16px var(--m-accent-glow);
+}
+.txn-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 11px 12px; background: var(--m-surface-1); border: 1px solid var(--m-border); border-radius: 12px;
+}
+.txn-ic {
+  width: 36px; height: 36px; border-radius: 10px; background: var(--m-surface-2);
+  display: grid; place-items: center; font-size: 16px; flex-shrink: 0;
+}
+.hub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hub-tile {
+  background: var(--m-surface-1); border: 1px solid var(--m-border); border-radius: 14px;
+  padding: 14px; display: flex; flex-direction: column; gap: 8px; min-height: 92px;
+}
+.hub-ic {
+  width: 34px; height: 34px; border-radius: 10px; background: var(--m-surface-2);
+  display: grid; place-items: center; font-size: 16px;
+}
+.dock {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 76px;
+  padding: 8px 10px 18px; background: rgba(17,23,36,0.94); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--m-border);
+  display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+}
+.dock-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 500; color: var(--m-ink-3);
+}
+.dock-item.active { color: var(--m-accent); font-weight: 600; }
+.dock-fab {
+  width: 46px; height: 46px; border-radius: 999px; background: var(--m-accent);
+  color: #FFF; font-size: 24px; font-weight: 600; display: grid; place-items: center;
+  margin: -18px auto 0; box-shadow: 0 6px 18px var(--m-accent-glow);
+}
+.home-ind {
+  position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+  width: 124px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.28);
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<header class="canvas-bar">
+  <div class="canvas-title">
+    <span>WealthFlow Mobile — Figma Artboard Spec</span>
+    <span class="badge badge-accent">393 × 852 iPhone 15 Pro</span>
+    <span class="badge">Safari Add-to-Home-Screen PWA</span>
+  </div>
+  <div class="filter-row" id="filters">
+    <button class="filter-btn active" data-show="all">All 6 Artboards</button>
+    <button class="filter-btn" data-show="auth">1. Auth</button>
+    <button class="filter-btn" data-show="home">2. Home</button>
+    <button class="filter-btn" data-show="add">3. Quick Add</button>
+    <button class="filter-btn" data-show="ledger">4. Ledger</button>
+    <button class="filter-btn" data-show="trips">5. TripFlow</button>
+    <button class="filter-btn" data-show="more">6. More Hub</button>
+  </div>
+</header>
+
+<main class="board">
+  <!-- ARTBOARD 1: AUTH -->
+  <section class="frame-wrap" data-board="auth">
+    <div class="frame-label"><strong>01 / Mobile Auth</strong><span>393 × 852</span></div>
+    <div class="iphone">
+      <div class="island"></div>
+      <div class="status-bar"><span>9:41</span><span>5G 100%</span></div>
+      <div class="m-body" style="justify-content:center; padding-bottom:36px;">
+        <div style="text-align:center; margin-bottom:6px;">
+          <div class="m-logo" style="width:52px;height:52px;font-size:20px;margin:0 auto 10px;border-radius:14px;">WF</div>
+          <div style="font-size:22px;font-weight:700;">WealthFlow</div>
+          <div class="muted" style="margin-top:4px;">Mobile Finance Manager</div>
+        </div>
+        <div class="seg-rail" style="justify-content:center;">
+          <div class="seg-pill active">Sign in</div>
+          <div class="seg-pill">Create account</div>
+          <div class="seg-pill">Reset</div>
+        </div>
+        <div class="hero-card">
+          <div class="muted">Username</div>
+          <div class="input-box">Root</div>
+          <div class="muted">Password</div>
+          <div class="input-box">••••••••</div>
+          <div class="muted">✓ Remember me for 30 days (PWA persistent)</div>
+          <div class="cta-btn">Sign in</div>
+        </div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+  </section>
+
+  <!-- ARTBOARD 2: HOME -->
+  <section class="frame-wrap" data-board="home">
+    <div class="frame-label"><strong>02 / Home Dashboard</strong><span>393 × 852</span></div>
+    <div class="iphone">
+      <div class="island"></div>
+      <div class="status-bar"><span>9:41</span><span>5G 100%</span></div>
+      <div class="m-header">
+        <div class="m-brand"><div class="m-logo">WF</div><span>Home</span></div>
+        <div class="m-hdr-right"><span class="m-pill-sm">2026 · All ▾</span><span class="m-pill-sm">₹</span><span class="m-avatar">👤</span></div>
+      </div>
+      <div class="m-body">
+        <div class="hero-card">
+          <div class="row-between">
+            <div><div class="muted">Net worth</div><div class="hero-val mono">₹4,82,500</div></div>
+            <span class="chip chip-acc">Calendar</span>
+          </div>
+          <div class="bar-track"><div class="bar-in" style="width:38%"></div><div class="bar-out" style="width:62%"></div></div>
+          <div class="kpi-grid">
+            <div class="kpi-cell"><span class="muted">Income</span><span class="kpi-num mono">₹1,01,016</span><span class="chip chip-ok">+100%</span></div>
+            <div class="kpi-cell"><span class="muted">Spend</span><span class="kpi-num mono">₹2,43,611</span><span class="chip chip-bad">+14.2%</span></div>
+            <div class="kpi-cell"><span class="muted">Today</span><span class="kpi-num mono">₹420</span></div>
+            <div class="kpi-cell"><span class="muted">Monthly Subs</span><span class="kpi-num mono">₹14,723</span></div>
+          </div>
+        </div>
+        <div class="sec-head">Upcoming dues & alerts</div>
+        <div class="alert-row">
+          <div><div style="font-size:13px;font-weight:600;">Sudhir (Given)</div><div class="muted">Due in 2d · 20 Nov · <strong class="mono" style="color:var(--m-ink-1)">₹70,000</strong></div></div>
+          <span class="paid-pill">✓ Recv</span>
+        </div>
+        <div class="alert-row warn">
+          <div><div style="font-size:13px;font-weight:600;">Dad Health Insurance</div><div class="muted">In 4d · 28 Nov · <strong class="mono" style="color:var(--m-ink-1)">₹1,439</strong></div></div>
+          <span class="paid-pill">✓ Paid</span>
+        </div>
+        <div class="sec-head">Analytics</div>
+        <div class="seg-rail">
+          <div class="seg-pill active">Category</div>
+          <div class="seg-pill">Daily</div>
+          <div class="seg-pill">In/Out</div>
+          <div class="seg-pill">Trend</div>
+        </div>
+        <div class="hbar-list">
+          <div class="hbar-row"><div class="row-between"><span>CC Bill Payment</span><span class="mono">₹1,30,199</span></div><div class="hbar-fill" style="width:94%"></div></div>
+          <div class="hbar-row"><div class="row-between"><span>EMI Payment</span><span class="mono">₹47,210</span></div><div class="hbar-fill" style="width:42%;background:#60A5FA"></div></div>
+          <div class="hbar-row"><div class="row-between"><span>Food</span><span class="mono">₹9,701</span></div><div class="hbar-fill" style="width:18%;background:#34D399"></div></div>
+        </div>
+      </div>
+      <nav class="dock">
+        <div class="dock-item active"><span>⌂</span><span>Home</span></div>
+        <div class="dock-item"><span>☰</span><span>Ledger</span></div>
+        <div class="dock-item"><div class="dock-fab">+</div></div>
+        <div class="dock-item"><span>✈</span><span>Trips</span></div>
+        <div class="dock-item"><span>⊞</span><span>More</span></div>
+      </nav>
+      <div class="home-ind"></div>
+    </div>
+  </section>
+
+  <!-- ARTBOARD 3: QUICK ADD -->
+  <section class="frame-wrap" data-board="add">
+    <div class="frame-label"><strong>03 / Quick Add (+ FAB)</strong><span>393 × 852</span></div>
+    <div class="iphone">
+      <div class="island"></div>
+      <div class="status-bar"><span>9:41</span><span>5G 100%</span></div>
+      <div class="m-header">
+        <div class="m-brand"><div class="m-logo">+</div><span>Quick Add</span></div>
+        <div class="m-hdr-right"><span class="m-pill-sm">₹ INR</span></div>
+      </div>
+      <div class="m-body">
+        <div class="seg-rail">
+          <div class="seg-pill active" style="flex:1;text-align:center;">Expense</div>
+          <div class="seg-pill" style="flex:1;text-align:center;">Income</div>
+          <div class="seg-pill" style="flex:1;text-align:center;">Trip</div>
+        </div>
+        <div class="hero-card">
+          <div class="muted">Amount (empty placeholder — tap & type immediately)</div>
+          <div class="input-box amount-big placeholder">0.00</div>
+          <div class="muted">Category</div>
+          <div class="input-box"><span>🍱 Food</span><span class="muted">▾</span></div>
+          <div class="muted">Date</div>
+          <div class="input-box"><span>2026-11-18</span><span class="muted">📅</span></div>
+          <div class="muted">Description</div>
+          <div class="input-box placeholder">What was this for?</div>
+          <div class="cta-btn">Record Transaction</div>
+        </div>
+      </div>
+      <nav class="dock">
+        <div class="dock-item"><span>⌂</span><span>Home</span></div>
+        <div class="dock-item"><span>☰</span><span>Ledger</span></div>
+        <div class="dock-item active"><div class="dock-fab">+</div></div>
+        <div class="dock-item"><span>✈</span><span>Trips</span></div>
+        <div class="dock-item"><span>⊞</span><span>More</span></div>
+      </nav>
+      <div class="home-ind"></div>
+    </div>
+  </section>
+
+  <!-- ARTBOARD 4: LEDGER -->
+  <section class="frame-wrap" data-board="ledger">
+    <div class="frame-label"><strong>04 / Ledger History</strong><span>393 × 852</span></div>
+    <div class="iphone">
+      <div class="island"></div>
+      <div class="status-bar"><span>9:41</span><span>5G 100%</span></div>
+      <div class="m-header">
+        <div class="m-brand"><div class="m-logo">☰</div><span>Ledger</span></div>
+        <div class="m-hdr-right"><span class="m-pill-sm">Filters ▾</span></div>
+      </div>
+      <div class="m-body">
+        <div class="input-box placeholder">🔍 Search notes or description…</div>
+        <div class="txn-row">
+          <div style="display:flex;align-items:center;gap:10px;"><div class="txn-ic">🍱</div><div><div style="font-size:14px;font-weight:600;">Swiggy Dinner</div><div class="muted">Food · 18 Nov</div></div></div>
+          <div class="mono" style="color:var(--m-danger);font-weight:600;">-₹485.00</div>
+        </div>
+        <div class="txn-row">
+          <div style="display:flex;align-items:center;gap:10px;"><div class="txn-ic">💰</div><div><div style="font-size:14px;font-weight:600;">Monthly Salary</div><div class="muted">Salary · 01 Nov</div></div></div>
+          <div class="mono" style="color:var(--m-success);font-weight:600;">+₹95,000.00</div>
+        </div>
+        <div class="txn-row">
+          <div style="display:flex;align-items:center;gap:10px;"><div class="txn-ic">💳</div><div><div style="font-size:14px;font-weight:600;">HDFC Card Bill</div><div class="muted">Bills · 28 Oct</div></div></div>
+          <div class="mono" style="color:var(--m-danger);font-weight:600;">-₹24,000.00</div>
+        </div>
+      </div>
+      <nav class="dock">
+        <div class="dock-item"><span>⌂</span><span>Home</span></div>
+        <div class="dock-item active"><span>☰</span><span>Ledger</span></div>
+        <div class="dock-item"><div class="dock-fab">+</div></div>
+        <div class="dock-item"><span>✈</span><span>Trips</span></div>
+        <div class="dock-item"><span>⊞</span><span>More</span></div>
+      </nav>
+      <div class="home-ind"></div>
+    </div>
+  </section>
+
+  <!-- ARTBOARD 5: TRIPFLOW -->
+  <section class="frame-wrap" data-board="trips">
+    <div class="frame-label"><strong>05 / TripFlow Mobile</strong><span>393 × 852</span></div>
+    <div class="iphone">
+      <div class="island"></div>
+      <div class="status-bar"><span>9:41</span><span>5G 100%</span></div>
+      <div class="m-header">
+        <div class="m-brand"><div class="m-logo">✈</div><span>TripFlow</span></div>
+        <div class="m-hdr-right"><span class="m-pill-sm">+ New Trip</span></div>
+      </div>
+      <div class="m-body">
+        <div class="input-box"><span>🟢 Goa Weekend</span><span class="muted">▾</span></div>
+        <div class="hero-card">
+          <div class="kpi-grid" style="border-top:0;padding-top:0;">
+            <div class="kpi-cell"><span class="muted">Total Cost</span><span class="kpi-num mono">₹38,400</span></div>
+            <div class="kpi-cell"><span class="muted">Pool Cash</span><span class="kpi-num mono">₹6,600</span></div>
+          </div>
+        </div>
+        <div class="seg-rail">
+          <div class="seg-pill active">Summary</div>
+          <div class="seg-pill">+ Add</div>
+          <div class="seg-pill">Ledger</div>
+          <div class="seg-pill">Friends</div>
+        </div>
+        <div class="txn-row">
+          <div><div style="font-size:14px;font-weight:600;">Ganesh</div><div class="muted">Paid ₹22,000 · Share ₹12,800</div></div>
+          <span class="chip chip-ok mono">+₹9,200</span>
+        </div>
+        <div class="txn-row">
+          <div><div style="font-size:14px;font-weight:600;">Rahul</div><div class="muted">Paid ₹8,000 · Share ₹12,800</div></div>
+          <span class="chip chip-bad mono">-₹4,800</span>
+        </div>
+        <div class="cta-btn" style="background:#059669;">📋 Copy WhatsApp Summary</div>
+      </div>
+      <nav class="dock">
+        <div class="dock-item"><span>⌂</span><span>Home</span></div>
+        <div class="dock-item"><span>☰</span><span>Ledger</span></div>
+        <div class="dock-item"><div class="dock-fab">+</div></div>
+        <div class="dock-item active"><span>✈</span><span>Trips</span></div>
+        <div class="dock-item"><span>⊞</span><span>More</span></div>
+      </nav>
+      <div class="home-ind"></div>
+    </div>
+  </section>
+
+  <!-- ARTBOARD 6: MORE HUB -->
+  <section class="frame-wrap" data-board="more">
+    <div class="frame-label"><strong>06 / More Hub</strong><span>393 × 852</span></div>
+    <div class="iphone">
+      <div class="island"></div>
+      <div class="status-bar"><span>9:41</span><span>5G 100%</span></div>
+      <div class="m-header">
+        <div class="m-brand"><div class="m-logo">⊞</div><span>More</span></div>
+        <div class="m-hdr-right"><span class="m-avatar">👤</span></div>
+      </div>
+      <div class="m-body">
+        <div class="hub-grid">
+          <div class="hub-tile"><div class="hub-ic">🥧</div><div><strong>Budgets</strong><div class="muted">Monthly limits</div></div></div>
+          <div class="hub-tile"><div class="hub-ic">🔄</div><div><strong>Subscriptions</strong><div class="muted">Recurring bills</div></div></div>
+          <div class="hub-tile"><div class="hub-ic">🏛️</div><div><strong>Loans & EMI</strong><div class="muted">Given & Taken</div></div></div>
+          <div class="hub-tile"><div class="hub-ic">💳</div><div><strong>Credit Cards</strong><div class="muted">Limits & Bills</div></div></div>
+          <div class="hub-tile"><div class="hub-ic">🏁</div><div><strong>Goals</strong><div class="muted">Savings targets</div></div></div>
+          <div class="hub-tile"><div class="hub-ic">📈</div><div><strong>Assets</strong><div class="muted">Net worth mix</div></div></div>
+          <div class="hub-tile"><div class="hub-ic">⚙️</div><div><strong>Settings</strong><div class="muted">Profile & Fiscal</div></div></div>
+          <div class="hub-tile"><div class="hub-ic">👥</div><div><strong>Admin</strong><div class="muted">Users (Admin)</div></div></div>
+        </div>
+      </div>
+      <nav class="dock">
+        <div class="dock-item"><span>⌂</span><span>Home</span></div>
+        <div class="dock-item"><span>☰</span><span>Ledger</span></div>
+        <div class="dock-item"><div class="dock-fab">+</div></div>
+        <div class="dock-item"><span>✈</span><span>Trips</span></div>
+        <div class="dock-item active"><span>⊞</span><span>More</span></div>
+      </nav>
+      <div class="home-ind"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+document.getElementById('filters').addEventListener('click', function(e) {
+  const btn = e.target.closest('button[data-show]');
+  if (!btn) return;
+  const target = btn.getAttribute('data-show');
+  document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.frame-wrap').forEach(f => {
+    f.style.display = (target === 'all' || f.getAttribute('data-board') === target) ? 'flex' : 'none';
+  });
+});
+</script>
+</body>
+</html>

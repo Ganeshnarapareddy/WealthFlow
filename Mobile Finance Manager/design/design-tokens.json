@@ -1,0 +1,55 @@
+{
+  "$schema": "https://design-tokens.org/schema.json",
+  "meta": {
+    "name": "WealthFlow Mobile — Tactile Obsidian Fintech",
+    "version": "1.0.0",
+    "targetViewports": ["393x852", "375x667", "430x932"],
+    "platform": "iOS Safari Standalone PWA (Streamlit)"
+  },
+  "color": {
+    "bg": { "value": "#090D16", "type": "color", "description": "App canvas & iOS status bar tint" },
+    "surface-1": { "value": "#111724", "type": "color", "description": "Primary cards, sheets, fixed bottom dock" },
+    "surface-2": { "value": "#182132", "type": "color", "description": "Inputs, secondary buttons, inactive tab pills" },
+    "surface-3": { "value": "#212D42", "type": "color", "description": "Pressed & active interactive surfaces" },
+    "border": { "value": "rgba(255, 255, 255, 0.08)", "type": "color" },
+    "border-strong": { "value": "rgba(255, 255, 255, 0.16)", "type": "color" },
+    "ink-1": { "value": "#F3F5F8", "type": "color", "description": "Primary headings & currency figures" },
+    "ink-2": { "value": "#9CA6B8", "type": "color", "description": "Secondary labels & dates" },
+    "ink-3": { "value": "#69758B", "type": "color", "description": "Placeholders & tertiary metadata" },
+    "accent": { "value": "#4F86F7", "type": "color", "description": "Primary Cobalt CTA, active tab pill, FAB" },
+    "accent-hover": { "value": "#3B74EB", "type": "color" },
+    "accent-low": { "value": "rgba(79, 134, 247, 0.16)", "type": "color" },
+    "accent-glow": { "value": "rgba(79, 134, 247, 0.32)", "type": "color" },
+    "success": { "value": "#34D399", "type": "color", "description": "Income, settled balances, Paid pill" },
+    "success-low": { "value": "rgba(52, 211, 153, 0.14)", "type": "color" },
+    "danger": { "value": "#F87171", "type": "color", "description": "Expenses, overdue dues, destructive CTA" },
+    "danger-low": { "value": "rgba(248, 113, 113, 0.14)", "type": "color" },
+    "warning": { "value": "#FBBF24", "type": "color", "description": "Due soon (3-5d), budget burn >= 80%" },
+    "warning-low": { "value": "rgba(251, 191, 36, 0.14)", "type": "color" }
+  },
+  "typography": {
+    "font-ui": { "value": "'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif", "type": "fontFamily" },
+    "font-mono": { "value": "'JetBrains Mono', ui-monospace, 'SF Mono', monospace", "type": "fontFamily" },
+    "hero": { "value": { "fontSize": "30px", "fontWeight": "700", "letterSpacing": "-0.03em", "lineHeight": "1.1" } },
+    "title": { "value": { "fontSize": "22px", "fontWeight": "700", "letterSpacing": "-0.02em", "lineHeight": "1.2" } },
+    "section": { "value": { "fontSize": "15px", "fontWeight": "600", "letterSpacing": "-0.01em", "lineHeight": "1.3" } },
+    "body": { "value": { "fontSize": "16px", "fontWeight": "400", "lineHeight": "1.45" }, "description": "Minimum 16px on inputs to prevent iOS Safari focus auto-zoom" },
+    "meta": { "value": { "fontSize": "12px", "fontWeight": "500", "lineHeight": "1.35" } }
+  },
+  "spacing": {
+    "touch-min": { "value": "44px", "type": "dimension" },
+    "header-height": { "value": "52px", "type": "dimension" },
+    "dock-height": { "value": "66px", "type": "dimension" },
+    "page-gutter": { "value": "14px", "type": "dimension" },
+    "card-pad": { "value": "14px", "type": "dimension" },
+    "gap-sm": { "value": "8px", "type": "dimension" },
+    "gap-md": { "value": "12px", "type": "dimension" },
+    "gap-lg": { "value": "18px", "type": "dimension" }
+  },
+  "radius": {
+    "hero": { "value": "16px", "type": "borderRadius" },
+    "card": { "value": "12px", "type": "borderRadius" },
+    "pill": { "value": "10px", "type": "borderRadius" },
+    "full": { "value": "999px", "type": "borderRadius" }
+  }
+}
