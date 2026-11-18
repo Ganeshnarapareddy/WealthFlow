@@ -65,8 +65,8 @@ def mount_ios_pwa_bridge(logo_b64: str | None = None):
                         }}
                     }});
 
-                    // Strip popover chevron (both SVG & Material icon variants) inside top-right profile square button
-                    const prof = doc.querySelector('.st-key-m_profile_pop button');
+                    // Strip popover chevron (both SVG & Material icon variants) inside top-right profile trigger ONLY
+                    const prof = doc.querySelector('.st-key-m_profile_pop [data-testid="stPopoverButton"]');
                     if (prof) {{
                         prof.querySelectorAll('svg').forEach(function(sv) {{
                             sv.style.display = 'none';

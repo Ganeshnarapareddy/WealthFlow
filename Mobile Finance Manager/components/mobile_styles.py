@@ -187,37 +187,62 @@ def apply_mobile_styles():
         }
 
         [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"]:first-child {
-            flex: 1 1 auto !important;
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
             justify-content: flex-start !important;
         }
-        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"]:not(:first-child) {
-            flex: 0 0 auto !important;
-            justify-content: flex-end !important;
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"]:first-child {
+            flex: 0 0 40px !important;
+            width: 40px !important;
+            max-width: 40px !important;
+            min-width: 40px !important;
         }
         [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"]:nth-child(2) {
-            flex: 1 1 auto !important;
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
             justify-content: flex-start !important;
         }
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"]:not(:nth-child(2)) {
-            flex: 0 0 auto !important;
+        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"]:has(.st-key-m_top_curr_sel),
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"]:has(.st-key-m_top_curr_sel) {
+            flex: 0 0 92px !important;
+            width: 92px !important;
+            max-width: 92px !important;
+            min-width: 92px !important;
+            justify-content: flex-end !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"]:has(.st-key-m_profile_pop),
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"]:has(.st-key-m_profile_pop) {
+            flex: 0 0 40px !important;
+            width: 40px !important;
+            max-width: 40px !important;
+            min-width: 40px !important;
+            justify-content: flex-end !important;
         }
 
-        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) [data-testid="stVerticalBlock"],
-        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) [data-testid="stElementContainer"],
-        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) [data-testid="stMarkdownContainer"],
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) [data-testid="stVerticalBlock"],
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) [data-testid="stElementContainer"] {
+        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {
             gap: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
-            display: flex !important;
-            align-items: center !important;
+            width: 100% !important;
+        }
+
+        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
+        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) [data-testid="stMarkdownContainer"] {
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         .wf-m-top-brand {
             display: flex;
             align-items: center;
-            gap: 9px;
+            gap: 8px;
             min-width: 0;
             height: 40px;
         }
@@ -234,7 +259,7 @@ def apply_mobile_styles():
         }
 
         .wf-m-top-title {
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 700;
             color: var(--m-ink-1);
             letter-spacing: -0.02em;
@@ -244,44 +269,53 @@ def apply_mobile_styles():
             text-overflow: ellipsis;
         }
 
-        /* Compact 40px rounded-square Currency dropdown matching 2026 / All / Calendar */
-        .st-key-m_top_curr_sel {
-            width: 96px !important;
-            min-width: 92px !important;
+        /* Compact 92x40 rounded-square Currency dropdown matching 2026 / All / Calendar */
+        .st-key-m_top_curr_sel,
+        .st-key-m_top_curr_sel > div,
+        .st-key-m_top_curr_sel [data-testid="stSelectbox"],
+        .st-key-m_top_curr_sel [data-baseweb="select"] {
+            width: 92px !important;
+            max-width: 92px !important;
+            min-width: 0 !important;
             margin: 0 !important;
+            padding: 0 !important;
         }
         .st-key-m_top_curr_sel [data-baseweb="select"] > div {
             min-height: 40px !important;
             height: 40px !important;
+            max-height: 40px !important;
             border-radius: var(--m-rad-card) !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
+            padding: 0 6px 0 8px !important;
             background-color: var(--m-surface-2) !important;
             border: 1px solid var(--m-border-strong) !important;
+            align-items: center !important;
         }
-        .st-key-m_top_curr_sel [data-baseweb="select"] div {
+        .st-key-m_top_curr_sel [data-baseweb="select"] > div > div:first-child {
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: hidden !important;
+        }
+        .st-key-m_top_curr_sel [data-baseweb="select"] div,
+        .st-key-m_top_curr_sel [data-baseweb="select"] input {
             font-size: 13px !important;
             font-weight: 600 !important;
             line-height: 1.2 !important;
         }
+        .st-key-m_top_curr_sel [data-baseweb="select"] svg {
+            width: 16px !important;
+            height: 16px !important;
+            margin: 0 !important;
+        }
 
-        /* Top-right Profile Person Popover Button — 40x40 rounded square matching 2026/All/Calendar & Currency */
-        .st-key-m_profile_pop,
-        .st-key-m_profile_pop [data-testid="stPopover"] {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
+        /* Top-right Profile Person Popover TRIGGER ONLY — exact 40x40 rounded square (never overrides closed popover hidden content) */
+        .st-key-m_profile_pop {
+            width: 40px !important;
+            max-width: 40px !important;
             height: 40px !important;
             margin: 0 !important;
             padding: 0 !important;
         }
-        .st-key-m_profile_pop [data-testid="stPopover"] > div {
-            display: flex !important;
-            align-items: center !important;
-            margin: 0 !important;
-        }
-        .st-key-m_profile_pop [data-testid="stPopover"] > div > button,
-        .st-key-m_profile_pop button {
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] {
             width: 40px !important;
             min-width: 40px !important;
             height: 40px !important;
@@ -297,7 +331,7 @@ def apply_mobile_styles():
             justify-content: center !important;
             gap: 0 !important;
         }
-        .st-key-m_profile_pop button > div {
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] > div {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -305,14 +339,14 @@ def apply_mobile_styles():
             padding: 0 !important;
             margin: 0 !important;
         }
-        .st-key-m_profile_pop button > div:nth-child(n+2),
-        .st-key-m_profile_pop button > span,
-        .st-key-m_profile_pop button svg,
-        .st-key-m_profile_pop button [data-testid="stPopoverIcon"],
-        .st-key-m_profile_pop button [data-testid="stMarkdownContainer"] {
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] > div:nth-child(n+2),
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] > span,
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] svg,
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] [data-testid="stPopoverIcon"],
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] {
             display: none !important;
         }
-        .st-key-m_profile_pop button [data-testid="stIconMaterial"] {
+        .st-key-m_profile_pop [data-testid="stPopoverButton"] [data-testid="stIconMaterial"] {
             margin: 0 !important;
             font-size: 20px !important;
             line-height: 1 !important;
