@@ -65,9 +65,15 @@ def mount_ios_pwa_bridge(logo_b64: str | None = None):
                         }}
                     }});
 
-                    // Strip popover chevron AND its wrapper inside top-right profile icon button so person icon sits dead-center
+                    // Strip popover chevron (both SVG & Material icon variants) inside top-right profile square button
                     const prof = doc.querySelector('.st-key-m_profile_pop button');
                     if (prof) {{
+                        prof.querySelectorAll('svg').forEach(function(sv) {{
+                            sv.style.display = 'none';
+                            if (sv.parentElement && sv.parentElement !== prof) {{
+                                sv.parentElement.style.display = 'none';
+                            }}
+                        }});
                         prof.querySelectorAll('[data-testid="stIconMaterial"]').forEach(function(ic) {{
                             if ((ic.textContent || '').trim().toLowerCase() !== 'person') {{
                                 ic.style.display = 'none';

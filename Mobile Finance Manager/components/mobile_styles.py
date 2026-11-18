@@ -79,18 +79,30 @@ def apply_mobile_styles():
             display: none !important;
         }
 
-        /* Centered mobile app shell (edge-to-edge on phones, crisp 460px column on desktop preview) */
+        /* Centered mobile app shell — flush top-left with zero wasted top gap */
         .block-container,
-        [data-testid="stMainBlockContainer"] {
+        [data-testid="stMainBlockContainer"],
+        [data-testid="stAppViewBlockContainer"] {
             max-width: 460px !important;
             width: 100% !important;
             margin: 0 auto !important;
-            padding: calc(8px + env(safe-area-inset-top, 0px)) 14px calc(98px + env(safe-area-inset-bottom, 0px)) 14px !important;
+            padding: calc(2px + env(safe-area-inset-top, 0px)) 12px calc(98px + env(safe-area-inset-bottom, 0px)) 12px !important;
+        }
+
+        /* Collapse hidden utility blocks (<style>, 0px PWA bridge, Cookie/JS iframes) so top bar starts flush at top */
+        [data-testid="stElementContainer"]:has(style),
+        [data-testid="stElementContainer"]:has(iframe[height="0"]),
+        [data-testid="stElementContainer"]:has(iframe[title*="streamlit_cookies_manager"]),
+        [data-testid="stElementContainer"]:has(iframe[title*="streamlit_javascript"]) {
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         /* Tighten vertical gaps between Streamlit blocks for crisp mobile rhythm */
         [data-testid="stVerticalBlock"] {
-            gap: 0.65rem !important;
+            gap: 0.6rem !important;
         }
 
         /* ============================================================
@@ -145,19 +157,19 @@ def apply_mobile_styles():
         }
 
         /* ============================================================
-           3. STICKY MOBILE TOP BAR (Forced Horizontal Row, Exact Vertical Center)
+           3. STICKY MOBILE TOP BAR (Flush Top-Left, Matching 40px Rounded Squares)
         ============================================================ */
         [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand),
         [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) {
             position: sticky;
             top: 0;
             z-index: 60;
-            background: rgba(9, 13, 22, 0.94);
+            background: rgba(9, 13, 22, 0.96);
             backdrop-filter: blur(14px);
             -webkit-backdrop-filter: blur(14px);
             border-bottom: 1px solid var(--m-border);
-            padding: 10px 2px !important;
-            margin: -8px -2px 6px -2px !important;
+            padding: 6px 0 10px 0 !important;
+            margin: 0 0 6px 0 !important;
             display: flex !important;
             flex-direction: row !important;
             flex-wrap: nowrap !important;
@@ -171,24 +183,34 @@ def apply_mobile_styles():
             width: auto !important;
             display: flex !important;
             align-items: center !important;
+            padding: 0 !important;
         }
 
         [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"]:first-child {
             flex: 1 1 auto !important;
+            justify-content: flex-start !important;
         }
         [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) > [data-testid="stColumn"]:not(:first-child) {
             flex: 0 0 auto !important;
+            justify-content: flex-end !important;
         }
         [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"]:nth-child(2) {
             flex: 1 1 auto !important;
+            justify-content: flex-start !important;
         }
         [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) > [data-testid="stColumn"]:not(:nth-child(2)) {
             flex: 0 0 auto !important;
         }
 
         [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) [data-testid="stVerticalBlock"],
-        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) [data-testid="stVerticalBlock"] {
+        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) [data-testid="stElementContainer"],
+        [data-testid="stHorizontalBlock"]:has(.wf-m-top-brand) [data-testid="stMarkdownContainer"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_top_back) [data-testid="stElementContainer"] {
             gap: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
             align-items: center !important;
         }
 
@@ -197,72 +219,76 @@ def apply_mobile_styles():
             align-items: center;
             gap: 9px;
             min-width: 0;
-            height: 36px;
+            height: 40px;
         }
 
         .wf-m-top-logo {
-            width: 32px;
-            height: 32px;
-            border-radius: 9px;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
             object-fit: contain;
             background: var(--m-surface-1);
             border: 1px solid var(--m-border-strong);
-            padding: 2px;
+            padding: 3px;
             flex-shrink: 0;
         }
 
         .wf-m-top-title {
-            font-size: 17px;
+            font-size: 18px;
             font-weight: 700;
             color: var(--m-ink-1);
             letter-spacing: -0.02em;
-            line-height: 1.2;
+            line-height: 1;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
-        .wf-m-top-right-cell {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 36px;
+        /* Compact 40px rounded-square Currency dropdown matching 2026 / All / Calendar */
+        .st-key-m_top_curr_sel {
+            width: 96px !important;
+            min-width: 92px !important;
+            margin: 0 !important;
+        }
+        .st-key-m_top_curr_sel [data-baseweb="select"] > div {
+            min-height: 40px !important;
+            height: 40px !important;
+            border-radius: var(--m-rad-card) !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            background-color: var(--m-surface-2) !important;
+            border: 1px solid var(--m-border-strong) !important;
+        }
+        .st-key-m_top_curr_sel [data-baseweb="select"] div {
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            line-height: 1.2 !important;
         }
 
-        .wf-m-curr-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            height: 36px;
-            width: 36px;
-            border-radius: var(--m-rad-full);
-            background: var(--m-surface-2);
-            border: 1px solid var(--m-border-strong);
-            font-family: var(--m-font-mono);
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--m-ink-1);
-            line-height: 1;
-        }
-
-        /* Top-right Profile Person Popover Button (exact 36x36 circle, icon dead-center, zero chevron) */
+        /* Top-right Profile Person Popover Button — 40x40 rounded square matching 2026/All/Calendar & Currency */
         .st-key-m_profile_pop,
         .st-key-m_profile_pop [data-testid="stPopover"] {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            height: 36px !important;
+            height: 40px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .st-key-m_profile_pop [data-testid="stPopover"] > div {
+            display: flex !important;
+            align-items: center !important;
             margin: 0 !important;
         }
         .st-key-m_profile_pop [data-testid="stPopover"] > div > button,
         .st-key-m_profile_pop button {
-            width: 36px !important;
-            min-width: 36px !important;
-            height: 36px !important;
-            min-height: 36px !important;
+            width: 40px !important;
+            min-width: 40px !important;
+            height: 40px !important;
+            min-height: 40px !important;
             padding: 0 !important;
             margin: 0 !important;
-            border-radius: var(--m-rad-full) !important;
+            border-radius: var(--m-rad-card) !important;
             background-color: var(--m-surface-2) !important;
             border: 1px solid var(--m-border-strong) !important;
             color: var(--m-ink-1) !important;
@@ -288,7 +314,7 @@ def apply_mobile_styles():
         }
         .st-key-m_profile_pop button [data-testid="stIconMaterial"] {
             margin: 0 !important;
-            font-size: 19px !important;
+            font-size: 20px !important;
             line-height: 1 !important;
         }
         .wf-m-profile-head {

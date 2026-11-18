@@ -136,9 +136,8 @@ def _load_logo_b64() -> str | None:
 
 LOGO_B64 = _load_logo_b64()
 
-# Apply Mobile Obsidian Fintech CSS & iOS Safari PWA tags
+# Apply Mobile Obsidian Fintech CSS (PWA JS bridge mounts at page end so zero iframe sits above top bar)
 apply_mobile_styles()
-mount_ios_pwa_bridge(LOGO_B64)
 
 # Persistent Cookie + iOS PWA localStorage session manager
 cookies = scm.EncryptedCookieManager(
@@ -168,6 +167,7 @@ if not st.session_state.user:
 # Auth Gate
 if not st.session_state.user:
     render_auth_view(LOGO_B64, AuthService, cookies, db)
+    mount_ios_pwa_bridge(LOGO_B64)
     st.stop()
 
 # Signed-in User State
@@ -222,5 +222,6 @@ else:
     st.session_state["m_page"] = "Home"
     render_dashboard_view(uid, FinanceService, CreditCardService, LoanService, BudgetService)
 
-# Fixed 5-Slot iOS Bottom Tab Dock
+# Fixed 5-Slot iOS Bottom Tab Dock & iOS Safari PWA Meta Bridge (at end so top bar is flush top-left)
 render_mobile_dock()
+mount_ios_pwa_bridge(LOGO_B64)

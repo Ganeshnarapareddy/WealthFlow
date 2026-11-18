@@ -24,28 +24,28 @@ PAGE_TITLES = {
 }
 
 SYM_MAP = {"INR (₹)": "₹", "USD ($)": "$", "EUR (€)": "€", "GBP (£)": "£"}
+COMPACT_SYM_MAP = {"₹ INR": "₹", "$ USD": "$", "€ EUR": "€", "£ GBP": "£"}
 CODE_BY_SYM = {"₹": "INR", "$": "USD", "€": "EUR", "£": "GBP"}
 
 
 def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service, auth_service, cookies):
-    """Sticky mobile top bar with optional <- Back button, page title, currency badge, and profile menu."""
+    """Flush top-left sticky mobile header: WealthFlow | interactive Currency dropdown | square Profile menu."""
     cur_page = st.session_state.get("m_page", "Home")
     is_subpage = cur_page in MORE_SUBPAGES
     title_txt = html.escape(PAGE_TITLES.get(cur_page, cur_page))
-    sym = html.escape(st.session_state.get("sym", "₹"))
     username = html.escape(str(user_data.get("username", "User")))
     sid = html.escape(str(user_data.get("short_id") or "—"))
 
     if is_subpage:
-        c_back, c_title, c_cur, c_prof = st.columns([0.15, 0.57, 0.14, 0.14], vertical_alignment="center")
+        c_back, c_title, c_cur, c_prof = st.columns([0.13, 0.45, 0.27, 0.15], vertical_alignment="center")
         with c_back:
             if st.button("", icon=":material/arrow_back:", key="m_top_back", help="Back to More"):
                 st.session_state["m_page"] = "More"
                 st.rerun()
         with c_title:
-            st.markdown(f'<div class="wf-m-top-title">{title_txt}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="wf-m-top-brand"><div class="wf-m-top-title">{title_txt}</div></div>', unsafe_allow_html=True)
     else:
-        c_title, c_cur, c_prof = st.columns([0.72, 0.14, 0.14], vertical_alignment="center")
+        c_title, c_cur, c_prof = st.columns([0.58, 0.27, 0.15], vertical_alignment="center")
         with c_title:
             logo_el = f'<img class="wf-m-top-logo" src="{logo_b64}" alt="WF">' if logo_b64 else ""
             st.markdown(
@@ -54,10 +54,28 @@ def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service,
             )
 
     with c_cur:
-        st.markdown(f'<div class="wf-m-top-right-cell"><span class="wf-m-curr-badge">{sym}</span></div>', unsafe_allow_html=True)
+        c_labels = list(COMPACT_SYM_MAP.keys())
+        cur_sym = st.session_state.get("sym", "₹")
+        try:
+            c_idx = list(COMPACT_SYM_MAP.values()).index(cur_sym)
+        except ValueError:
+            c_idx = 0
+        picked_curr = st.selectbox(
+            "Currency",
+            c_labels,
+            index=c_idx,
+            label_visibility="collapsed",
+            key="m_top_curr_sel",
+        )
+        if COMPACT_SYM_MAP[picked_curr] != cur_sym:
+            new_sym = COMPACT_SYM_MAP[picked_curr]
+            st.session_state["sym"] = new_sym
+            finance_service.set_setting("currency_symbol", new_sym, user_data["id"])
+            finance_service.set_setting("currency", CODE_BY_SYM.get(new_sym, "INR"), user_data["id"])
+            st.rerun()
 
     with c_prof:
-        with st.popover("", icon=":material/person:", key="m_profile_pop", help="Account & preferences"):
+        with st.popover("", icon=":material/person:", key="m_profile_pop", help="Account & settings"):
             st.markdown(
                 f'<div class="wf-m-profile-head">'
                 f'<div class="wf-m-profile-name">{username}</div>'
@@ -65,20 +83,6 @@ def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service,
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            labels = list(SYM_MAP.keys())
-            cur_sym = st.session_state.get("sym", "₹")
-            try:
-                cur_idx = list(SYM_MAP.values()).index(cur_sym)
-            except ValueError:
-                cur_idx = 0
-            picked_curr = st.selectbox("Currency", labels, index=cur_idx, key="m_prof_curr_sel")
-            if SYM_MAP[picked_curr] != cur_sym:
-                new_sym = SYM_MAP[picked_curr]
-                st.session_state["sym"] = new_sym
-                finance_service.set_setting("currency_symbol", new_sym, user_data["id"])
-                finance_service.set_setting("currency", CODE_BY_SYM.get(new_sym, "INR"), user_data["id"])
-                st.rerun()
-
             if st.button("Settings & Profile", icon=":material/tune:", key="m_prof_settings", use_container_width=True):
                 st.session_state["m_page"] = "Settings"
                 st.rerun()
