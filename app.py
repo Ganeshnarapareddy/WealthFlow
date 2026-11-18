@@ -8,9 +8,66 @@ import streamlit_cookies_manager as scm
 from streamlit_javascript import st_javascript
 from datetime import datetime, timedelta
 import base64
+import html as _html
 import os
+import sys
 import json
 import streamlit.components.v1 as components
+
+# Auto-reload stale local modules after git pull on Streamlit Cloud hot-reloads
+_WF_LOCAL_MODULES = (
+    "database",
+    "services.auth_service",
+    "services.recurring_service",
+    "services.budget_service",
+    "services.goal_service",
+    "services.asset_service",
+    "services.loan_service",
+    "services.credit_card_service",
+    "services.finance_service",
+    "services.trip_service",
+    "components.styles",
+    "components.ui_elements",
+    "components.sidebar",
+)
+
+def _sync_local_modules():
+    """Evict stale local modules when files change on disk (fixes Streamlit Cloud hot-reload after git pull)."""
+    db_stale = False
+    any_stale = False
+    for name in _WF_LOCAL_MODULES:
+        mod = sys.modules.get(name)
+        if mod is None:
+            continue
+        mod_file = getattr(mod, "__file__", None)
+        if not mod_file or not os.path.exists(mod_file):
+            continue
+        try:
+            cur_mtime = os.path.getmtime(mod_file)
+        except OSError:
+            continue
+        if db_stale or getattr(mod, "__wf_mtime__", None) != cur_mtime:
+            sys.modules.pop(name, None)
+            any_stale = True
+            if name == "database":
+                db_stale = True
+    if any_stale:
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+
+def _stamp_local_modules():
+    for name in _WF_LOCAL_MODULES:
+        mod = sys.modules.get(name)
+        mod_file = getattr(mod, "__file__", None) if mod is not None else None
+        if mod is not None and mod_file and os.path.exists(mod_file) and getattr(mod, "__wf_mtime__", None) is None:
+            try:
+                mod.__wf_mtime__ = os.path.getmtime(mod_file)
+            except OSError:
+                pass
+
+_sync_local_modules()
 
 # Import Services
 from database import db
@@ -87,6 +144,7 @@ if not st.session_state.get('_db_repaired'):
 from components.styles import apply_styles
 from components.ui_elements import card_metric, section_header, empty_state, stat_strip, style_plotly
 from components.sidebar import render_sidebar
+_stamp_local_modules()
 
 # Constants
 ASSET_TYPES = ["Mutual Fund", "Stock", "Crypto", "Gold", "Real Estate", "FD", "Other"]
@@ -240,31 +298,23 @@ def fmt(val):
         return f"{st.session_state['sym']}0.00"
     return f"{st.session_state['sym']}{val:,.2f}"
 
-# Delete confirmation helper
+# Delete confirmation helper — floating popover keeps Yes / No cleanly side-by-side without narrow-column wrapping
 def render_delete_button(item_id, button_key, delete_func, user_id, item_name="item"):
-    conf_key = f"del_conf_{item_id}"
-    if conf_key not in st.session_state['delete_confirm']:
-        st.session_state['delete_confirm'][conf_key] = False
-
-    if not st.session_state['delete_confirm'][conf_key]:
-        if st.button("", icon=":material/delete_outline:", help=f"Delete {item_name}", key=button_key):
-            st.session_state['delete_confirm'][conf_key] = True
-            st.rerun()
-    else:
-        st.warning(f"Delete {item_name}?")
+    with st.popover("", icon=":material/delete_outline:", help=f"Delete {item_name}"):
+        st.markdown(
+            f'<div class="wf-del-confirm-msg">Delete <strong>{_html.escape(str(item_name))}</strong>?</div>',
+            unsafe_allow_html=True,
+        )
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("Yes", icon=":material/check:", type="primary", key=f"yes_{item_id}"):
+            if st.button("Yes", icon=":material/check:", type="primary", use_container_width=True, key=f"yes_{button_key}"):
                 delete_func(item_id, user_id)
-                st.session_state['delete_confirm'][conf_key] = False
-                # Set delete flag for popup
                 if "cdel_" in button_key: st.session_state['card_deleted'] = True
                 elif "ldel_" in button_key or "del_loan_" in button_key: st.session_state['loan_deleted'] = True
                 elif "del_c_txn_" in button_key: st.session_state['card_txn_deleted'] = True
                 st.rerun()
         with c2:
-            if st.button("No", icon=":material/close:", key=f"no_{item_id}"):
-                st.session_state['delete_confirm'][conf_key] = False
+            if st.button("No", icon=":material/close:", use_container_width=True, key=f"no_{button_key}"):
                 st.rerun()
 
 page = st.session_state['page']
@@ -1660,25 +1710,19 @@ elif page == "TripFlow":
     active_tid = st.session_state.get('active_trip_id')
 
     def _render_frag_delete_button(item_id, button_key, delete_func, item_name="item", toast_msg="Item deleted."):
-        conf_key = f"del_conf_{item_id}"
-        if conf_key not in st.session_state['delete_confirm']:
-            st.session_state['delete_confirm'][conf_key] = False
-        if not st.session_state['delete_confirm'][conf_key]:
-            if st.button("", icon=":material/delete_outline:", help=f"Delete {item_name}", key=button_key):
-                st.session_state['delete_confirm'][conf_key] = True
-                st.rerun(scope="fragment")
-        else:
-            st.warning(f"Delete {item_name}?")
+        with st.popover("", icon=":material/delete_outline:", help=f"Delete {item_name}"):
+            st.markdown(
+                f'<div class="wf-del-confirm-msg">Delete <strong>{_html.escape(str(item_name))}</strong>?</div>',
+                unsafe_allow_html=True,
+            )
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Yes", icon=":material/check:", type="primary", key=f"yes_{item_id}"):
+                if st.button("Yes", icon=":material/check:", type="primary", use_container_width=True, key=f"yes_{button_key}"):
                     delete_func(item_id)
-                    st.session_state['delete_confirm'][conf_key] = False
                     st.session_state['trip_toast_msg'] = toast_msg
                     st.rerun(scope="fragment")
             with c2:
-                if st.button("No", icon=":material/close:", key=f"no_{item_id}"):
-                    st.session_state['delete_confirm'][conf_key] = False
+                if st.button("No", icon=":material/close:", use_container_width=True, key=f"no_{button_key}"):
                     st.rerun(scope="fragment")
 
     @st.fragment

@@ -1349,11 +1349,19 @@ def apply_styles():
             font-size: var(--text-sm) !important;
             font-weight: 500 !important;
             letter-spacing: 0 !important;
+            white-space: nowrap !important;
             box-shadow: none !important;
             transition:
                 background-color var(--dur-micro) var(--ease-out),
                 border-color var(--dur-micro) var(--ease-out),
                 transform var(--dur-press) var(--ease-out) !important;
+        }
+
+        .stButton > button [data-testid="stMarkdownContainer"] p,
+        [data-testid="stFormSubmitButton"] > button [data-testid="stMarkdownContainer"] p {
+            white-space: nowrap !important;
+            margin: 0 !important;
+            line-height: 1.2 !important;
         }
 
         /* Primary CTA buttons & form submit buttons get the cobalt signal */
@@ -1434,6 +1442,24 @@ def apply_styles():
             width: 276px !important;
             min-width: 260px !important;
             max-width: 92% !important;
+        }
+
+        /* Delete confirmation popover message */
+        .wf-del-confirm-msg {
+            background-color: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.28);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            font-size: var(--text-sm);
+            color: var(--color-ink);
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .wf-del-confirm-msg strong {
+            color: var(--color-ink);
+            font-weight: 600;
         }
 
         /* ============================================================

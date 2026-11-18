@@ -448,6 +448,20 @@ def _mount_shell_controller(nav_entries, current_page_label: str):
                         layer.style.transform = 'none';
                     }}
                 }}
+                /* Clamp any right-edge popover (e.g. delete confirmation) inside viewport */
+                const vw = win.innerWidth || doc.documentElement.clientWidth || 1280;
+                doc.querySelectorAll('[data-baseweb="popover"]').forEach(function(layer) {{
+                    if (layer.querySelector('.wf-profile-head')) return;
+                    if (!layer.querySelector('[data-testid="stPopoverBody"]')) return;
+                    const rect = layer.getBoundingClientRect();
+                    if (rect.width > 0 && rect.right > vw - 16) {{
+                        const shift = Math.ceil(rect.right - (vw - 16));
+                        if (shift > 1) {{
+                            const curMargin = parseFloat(layer.style.marginLeft || '0') || 0;
+                            layer.style.marginLeft = (curMargin - shift) + 'px';
+                        }}
+                    }}
+                }});
             }}
 
             /* 5. Wire WealthFlow breadcrumb & sidebar brand to route directly to Dashboard */
