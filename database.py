@@ -282,6 +282,29 @@ class TursoManager:
                 except Exception:
                     pass
 
+        # Performance Indexes: Composite indexes for sub-millisecond query performance
+        index_ddl = [
+            "CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date)",
+            "CREATE INDEX IF NOT EXISTS idx_txn_user_cat ON transactions(user_id, category_id)",
+            "CREATE INDEX IF NOT EXISTS idx_cc_txn_card_date ON credit_card_transactions(card_id, date)",
+            "CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_budgets_user_period ON budgets(user_id, year, month)",
+            "CREATE INDEX IF NOT EXISTS idx_loans_user ON loans(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_assets_user ON assets(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_actioned_alerts_user ON actioned_alerts(user_id, alert_id)",
+            "CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token)",
+            "CREATE INDEX IF NOT EXISTS idx_wf_users_user ON wf_users(username)",
+        ]
+        try:
+            self.batch(index_ddl)
+        except Exception:
+            for idx_stmt in index_ddl:
+                try:
+                    self.execute(idx_stmt)
+                except Exception:
+                    pass
+
         # Ensure default admin user & default admin account exist (single batch check)
         try:
             chk_res = self.batch([

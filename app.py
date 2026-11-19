@@ -93,32 +93,42 @@ def get_base64_logo():
 
 LOGO_B64 = get_base64_logo()
 
-# --- COOKIE MANAGEMENT ---
-# Using the more persistent EncryptedCookieManager
-cookies = scm.EncryptedCookieManager(
-    password=st.secrets.get("COOKIE_PASSWORD", "wealthflow_pro_2026_secure"),
-    path="/"
-)
-if not cookies.ready():
-    st.stop()
+# --- COOKIE & PERSISTENT SESSION MANAGEMENT ---
+from components.auth_cookie import get_persisted_token, inject_save_token_script
 
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
 
+# Frame-1 synchronous check via native HTTP request cookies
+if not st.session_state.user:
+    req_token = get_persisted_token()
+    if req_token:
+        user_data = AuthService.validate_session(req_token)
+        if user_data:
+            st.session_state.user = user_data
+
+cookies = scm.EncryptedCookieManager(
+    password=st.secrets.get("COOKIE_PASSWORD", "wealthflow_pro_2026_secure"),
+    path="/"
+)
+
 # --- PERSISTENT LOGIN CHECK ---
 if not st.session_state.user:
-    token = cookies.get('wealthflow_remember_token')
+    if not cookies.ready():
+        st.stop()
+    token = get_persisted_token(cookies)
     
     # iPhone PWA Fallback: Check localStorage if cookie is missing or empty
     if not token:
-        # st_javascript returns the value directly
         ls_token = st_javascript("localStorage.getItem('wealthflow_remember_token');")
         if ls_token and ls_token != "null" and isinstance(ls_token, str):
             token = ls_token
-            # Sync back to cookie for next time
-            cookies['wealthflow_remember_token'] = token
-            cookies.save()
+            try:
+                cookies['wealthflow_remember_token'] = token
+                cookies.save()
+            except Exception:
+                pass
 
     if token:
         user_data = AuthService.validate_session(token)
@@ -185,10 +195,12 @@ def login_page():
                         st.session_state.user = user
                         if l_remember:
                             token = AuthService.create_session(user['id'])
-                            cookies['wealthflow_remember_token'] = token
-                            cookies.save()
-                            # Backup to localStorage for mobile PWA persistence
-                            st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
+                            try:
+                                cookies['wealthflow_remember_token'] = token
+                                cookies.save()
+                            except Exception:
+                                pass
+                            st.session_state['_auth_save_token'] = token
                         # Load saved currency preference
                         saved_sym = FinanceService.get_setting('currency_symbol', '₹', user['id'])
                         st.session_state['sym'] = saved_sym
@@ -219,10 +231,12 @@ def login_page():
                                 st.session_state.user = user
                                 if s_remember:
                                     token = AuthService.create_session(user['id'])
-                                    cookies['wealthflow_remember_token'] = token
-                                    cookies.save()
-                                    # Backup to localStorage for mobile PWA persistence
-                                    st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
+                                    try:
+                                        cookies['wealthflow_remember_token'] = token
+                                        cookies.save()
+                                    except Exception:
+                                        pass
+                                    st.session_state['_auth_save_token'] = token
                                 st.rerun()
                         else:
                             st.error(str(uid_res))
@@ -251,6 +265,11 @@ if not st.session_state.user:
     st.stop()
 
 uid = st.session_state.user['id']
+
+# Persist remember token across frames if queued
+save_tok = st.session_state.pop('_auth_save_token', None)
+if save_tok:
+    inject_save_token_script(save_tok)
 
 # Initialize Session State
 if 'sym' not in st.session_state:
@@ -508,20 +527,15 @@ if page == "Dashboard":
                 date_esc = _html.escape(str(a['date']))
                 cat_esc = _html.escape(str(cat))
 
-                if days <= 0:
+                # Color code alerts: <= 2d: Red (danger), <= 10d: Orange (warning), > 10d: Green (positive)
+                if days <= 2:
                     tone = "danger"
-                    due_txt = "Due today"
-                elif days <= 2:
-                    tone = "danger"
-                    due_txt = f"Due in {days}d"
-                elif days <= 5:
+                    due_txt = "Due today" if days <= 0 else f"Due in {days}d"
+                elif days <= 10:
                     tone = "warning"
                     due_txt = f"In {days}d"
-                elif days <= 7:
-                    tone = "accent"
-                    due_txt = f"In {days}d"
                 else:
-                    tone = "muted"
+                    tone = "positive"
                     due_txt = f"In {days}d"
 
                 c1, c2 = st.columns([0.84, 0.16], vertical_alignment="center")
@@ -547,7 +561,7 @@ if page == "Dashboard":
 
                 with c2:
                     if cat == 'Subscription':
-                        if st.button("Paid", icon=":material/check:", key=f"alert_act_sub_{a['id']}"):
+                        if st.button("Paid", key=f"alert_act_sub_{a['id']}", use_container_width=True):
                             FinanceService.mark_alert_actioned(a['id'], uid)
                             FinanceService.add_transaction(
                                 amount=a['amount'],
@@ -559,19 +573,28 @@ if page == "Dashboard":
                             )
                             st.rerun()
                     elif cat == 'EMI':
-                        if st.button("Paid", icon=":material/check:", key=f"alert_act_cc_emi_{a['id']}"):
+                        if st.button("Paid", key=f"alert_act_cc_emi_{a['id']}", use_container_width=True):
                             CreditCardService.mark_emi_paid(a['id'])
                             st.rerun()
                     elif cat == 'Loan':
-                        btn_label = "Received" if "Given" in a['name'] else "Paid"
-                        if st.button(btn_label, icon=":material/check:", key=f"alert_act_loan_{a['id']}"):
-                            if a.get('is_emi'):
-                                LoanService.toggle_payment_status(a['id'], "pending")
-                            else:
-                                LoanService.update_loan_status(a['id'], 'paid')
-                            st.rerun()
+                        is_given = "Given" in a['name']
+                        if is_given:
+                            # For receive: no check icon, green hover, exact same pill size
+                            if st.button("Receive", key=f"alert_act_receive_{a['id']}", use_container_width=True):
+                                if a.get('is_emi'):
+                                    LoanService.toggle_payment_status(a['id'], "pending")
+                                else:
+                                    LoanService.update_loan_status(a['id'], 'paid')
+                                st.rerun()
+                        else:
+                            if st.button("Paid", key=f"alert_act_paid_{a['id']}", use_container_width=True):
+                                if a.get('is_emi'):
+                                    LoanService.toggle_payment_status(a['id'], "pending")
+                                else:
+                                    LoanService.update_loan_status(a['id'], 'paid')
+                                st.rerun()
                     elif cat == 'Bill':
-                        if st.button("Paid", icon=":material/check:", key=f"alert_act_cc_bill_{a['id']}"):
+                        if st.button("Paid", key=f"alert_act_cc_bill_{a['id']}", use_container_width=True):
                             CreditCardService.add_transaction(uid, a['id'], a['amount'], f"Bill Payment: {a['name']}", "payment", sync_bank=True)
                             st.rerun()
 

@@ -13,6 +13,8 @@ def apply_mobile_styles():
         /* critique: mobile-first thumb dock, 16px non-zoom inputs, unified BaseWeb + React Aria pills */
 
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
         :root {
             --m-bg: #090D16;
@@ -755,9 +757,9 @@ def apply_mobile_styles():
             border-radius: var(--m-rad-full);
             line-height: 1.4;
         }
-        .m-chip.positive { background: var(--m-success-low); color: var(--m-success); }
-        .m-chip.negative { background: var(--m-danger-low); color: var(--m-danger); }
-        .m-chip.warning { background: var(--m-warning-low); color: var(--m-warning); }
+        .m-chip.positive { background: rgba(16, 185, 129, 0.16) !important; color: #10B981 !important; }
+        .m-chip.danger, .m-chip.negative { background: rgba(239, 68, 68, 0.16) !important; color: #EF4444 !important; }
+        .m-chip.warning { background: rgba(245, 158, 11, 0.16) !important; color: #F59E0B !important; }
         .m-chip.accent { background: var(--m-accent-low); color: #8AB4FF; }
         .m-chip.neutral { background: var(--m-surface-2); color: var(--m-ink-2); }
 
@@ -774,9 +776,46 @@ def apply_mobile_styles():
             padding: 10px 12px;
             min-height: 50px;
         }
-        .m-alert-row.tone-danger { border-left-color: var(--m-danger); }
-        .m-alert-row.tone-warning { border-left-color: var(--m-warning); }
+        .m-alert-row.tone-danger { border-left-color: #EF4444 !important; }
+        .m-alert-row.tone-warning { border-left-color: #F59E0B !important; }
+        .m-alert-row.tone-positive { border-left-color: #10B981 !important; }
         .m-alert-row.tone-accent { border-left-color: var(--m-accent); }
+
+        /* Alert Action Pill Buttons (Uniform size, Green hover on Receive, Red hover on Paid) */
+        [class*="st-key-m_alert_"] button {
+            height: 32px !important;
+            min-height: 32px !important;
+            padding: 0 14px !important;
+            border-radius: var(--m-rad-full) !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            white-space: nowrap !important;
+            transition: all 0.15s ease !important;
+        }
+        /* Hover Green for Receive */
+        [class*="st-key-m_alert_receive_"] button:hover {
+            background-color: rgba(16, 185, 129, 0.2) !important;
+            border-color: #10B981 !important;
+            color: #10B981 !important;
+        }
+        [class*="st-key-m_alert_receive_"] button:hover * {
+            color: #10B981 !important;
+        }
+        /* Hover Red for Paid */
+        [class*="st-key-m_alert_sub_"] button:hover,
+        [class*="st-key-m_alert_emi_"] button:hover,
+        [class*="st-key-m_alert_bill_"] button:hover,
+        [class*="st-key-m_alert_paid_"] button:hover {
+            background-color: rgba(239, 68, 68, 0.2) !important;
+            border-color: #EF4444 !important;
+            color: #EF4444 !important;
+        }
+        [class*="st-key-m_alert_sub_"] button:hover *,
+        [class*="st-key-m_alert_emi_"] button:hover *,
+        [class*="st-key-m_alert_bill_"] button:hover *,
+        [class*="st-key-m_alert_paid_"] button:hover * {
+            color: #EF4444 !important;
+        }
 
         .m-alert-name {
             font-family: var(--m-font-ui) !important;
@@ -922,6 +961,55 @@ def apply_mobile_styles():
         .m-empty-title { font-size: 15px; font-weight: 600; color: var(--m-ink-1); }
         .m-empty-sub { font-size: 13px; color: var(--m-ink-2); margin-top: 4px; }
 
+        /* Pure CSS Breakdown Bars (Monzo / iOS Wallet style) */
+        .m-breakdown-card {
+            background-color: var(--m-surface-1);
+            border: 1px solid var(--m-border);
+            border-radius: var(--m-rad-hero);
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .m-breakdown-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .m-breakdown-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .m-breakdown-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--m-ink-1);
+        }
+        .m-breakdown-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .m-breakdown-amt {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--m-ink-1);
+            font-family: var(--m-font-mono);
+        }
+        .m-breakdown-track {
+            width: 100%;
+            height: 6px;
+            background-color: var(--m-surface-2);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .m-breakdown-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
         /* ============================================================
            6. UNIFIED TABS & SEGMENTED CONTROLS (BaseWeb + React Aria)
         ============================================================ */
@@ -993,9 +1081,10 @@ def apply_mobile_styles():
             display: none !important;
         }
 
-        /* Segmented controls */
+        /* Segmented controls & button groups */
         [data-testid="stSegmentedControl"] [role="radiogroup"],
-        [data-testid="stButtonGroup"] > div {
+        [data-testid="stButtonGroup"] > div,
+        .stButtonGroup > div {
             background-color: var(--m-surface-1) !important;
             border: 1px solid var(--m-border) !important;
             border-radius: var(--m-rad-card) !important;
@@ -1007,7 +1096,8 @@ def apply_mobile_styles():
             scrollbar-width: none !important;
         }
         [data-testid="stSegmentedControl"] button,
-        [data-testid="stButtonGroup"] button {
+        [data-testid="stButtonGroup"] button,
+        .stButtonGroup button {
             border-radius: 8px !important;
             border: 1px solid var(--m-border-strong) !important;
             background-color: var(--m-surface-2) !important;
@@ -1018,10 +1108,17 @@ def apply_mobile_styles():
             font-weight: 500 !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
+            transition: all 0.15s ease !important;
         }
         [data-testid="stSegmentedControl"] button[aria-checked="true"],
+        [data-testid="stButtonGroup"] button[aria-checked="true"],
+        [data-testid="stButtonGroup"] button[aria-pressed="true"],
+        [data-testid="stButtonGroup"] [data-testid*="Active"],
         [data-testid="stButtonGroup"] button[kind="segmented_controlActive"],
-        [data-testid="stButtonGroup"] button[aria-pressed="true"] {
+        button[data-testid="stBaseButton-segmented_controlActive"],
+        button[data-testid="stBaseButton-pillsActive"],
+        .stButtonGroup button[aria-checked="true"],
+        .stButtonGroup [data-testid*="Active"] {
             background-color: var(--m-accent) !important;
             border-color: var(--m-accent) !important;
             color: var(--m-accent-ink) !important;
@@ -1029,8 +1126,14 @@ def apply_mobile_styles():
             box-shadow: 0 2px 10px var(--m-accent-glow) !important;
         }
         [data-testid="stSegmentedControl"] button[aria-checked="true"] *,
+        [data-testid="stButtonGroup"] button[aria-checked="true"] *,
+        [data-testid="stButtonGroup"] button[aria-pressed="true"] *,
+        [data-testid="stButtonGroup"] [data-testid*="Active"] *,
         [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] *,
-        [data-testid="stButtonGroup"] button[aria-pressed="true"] * {
+        button[data-testid="stBaseButton-segmented_controlActive"] *,
+        button[data-testid="stBaseButton-pillsActive"] *,
+        .stButtonGroup button[aria-checked="true"] *,
+        .stButtonGroup [data-testid*="Active"] * {
             color: var(--m-accent-ink) !important;
         }
 

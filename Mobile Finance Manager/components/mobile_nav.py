@@ -88,13 +88,19 @@ def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service,
                 st.rerun()
 
             if st.button("Log out", icon=":material/logout:", key="m_prof_logout", use_container_width=True):
-                token = cookies.get("wealthflow_remember_token")
+                from components.auth_cookie import get_persisted_token, inject_clear_token_script
+                token = get_persisted_token(cookies)
                 if token:
                     auth_service.clear_session(token)
+                try:
                     cookies["wealthflow_remember_token"] = ""
                     cookies.save()
-                st_javascript("localStorage.removeItem('wealthflow_remember_token');")
+                except Exception:
+                    pass
+                inject_clear_token_script()
                 st.session_state.user = None
+                st.session_state.pop("_auth_save_token", None)
+                st.session_state.pop("_auth_token_active", None)
                 st.rerun()
 
 

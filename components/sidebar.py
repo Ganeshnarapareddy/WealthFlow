@@ -59,9 +59,12 @@ def render_topbar(user_data, current_page_label: str, finance_service, auth_serv
     initials = _user_initials(user_data.get("username", "U"))
     sid_display = html.escape(str(user_data.get("short_id", "N/A")))
     sym = html.escape(str(st.session_state.get("sym", "₹")))
+    sym_raw = st.session_state.get("sym", "₹")
+    curr_codes = {"₹": "INR", "$": "USD", "€": "EUR", "£": "GBP"}
+    curr_code = curr_codes.get(sym_raw, "INR")
     page_esc = html.escape(current_page_label)
 
-    col_left, col_tools, col_profile = st.columns([6.4, 2.5, 0.7], vertical_alignment="center")
+    col_left, col_tools, col_curr, col_profile = st.columns([5.4, 2.3, 1.1, 1.2], vertical_alignment="center")
 
     with col_left:
         st.markdown(
@@ -84,14 +87,35 @@ def render_topbar(user_data, current_page_label: str, finance_service, auth_serv
                     <span>Jump to…</span>
                     <span class="wf-kbd">Ctrl K</span>
                 </button>
-                <span class="wf-topbar-pill" title="Active currency">{sym}</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
+    with col_curr:
+        with st.popover(f"{sym_raw} {curr_code}", icon=":material/payments:", key="tb_curr_pop", help="Switch display currency"):
+            sym_map = {"INR (₹)": "₹", "USD ($)": "$", "EUR (€)": "€", "GBP (£)": "£"}
+            current_sym = st.session_state.get("sym", "₹")
+            try:
+                curr_idx = list(sym_map.values()).index(current_sym)
+            except ValueError:
+                curr_idx = 0
+
+            selected_label = st.selectbox(
+                "Display Currency",
+                options=list(sym_map.keys()),
+                index=curr_idx,
+                key="tb_currency_sel",
+            )
+            if sym_map[selected_label] != current_sym:
+                new_s = sym_map[selected_label]
+                st.session_state["sym"] = new_s
+                finance_service.set_setting("currency_symbol", new_s, user_data["id"])
+                finance_service.set_setting("currency", curr_codes.get(new_s, "INR"), user_data["id"])
+                st.rerun()
+
     with col_profile:
-        with st.popover("", icon=":material/person:", key="tb_profile_pop", help=f"{user_data.get('username', 'User')} — Profile & account"):
+        with st.popover(f"{username}", icon=":material/person:", key="tb_profile_pop", help=f"{user_data.get('username', 'User')} — Profile & account"):
             st.markdown(
                 f"""
                 <div class="wf-profile-head">
@@ -102,29 +126,8 @@ def render_topbar(user_data, current_page_label: str, finance_service, auth_serv
                 unsafe_allow_html=True,
             )
 
-            # 1. Currency Selector
-            sym_map = {"INR (₹)": "₹", "USD ($)": "$", "EUR (€)": "€", "GBP (£)": "£"}
-            current_sym = st.session_state.get("sym", "₹")
-            try:
-                curr_idx = list(sym_map.values()).index(current_sym)
-            except ValueError:
-                curr_idx = 0
-
-            selected_label = st.selectbox(
-                "Currency",
-                options=list(sym_map.keys()),
-                index=curr_idx,
-                key="tb_currency_sel",
-            )
-            if sym_map[selected_label] != current_sym:
-                st.session_state["sym"] = sym_map[selected_label]
-                finance_service.set_setting(
-                    "currency_symbol", sym_map[selected_label], user_data["id"]
-                )
-                st.rerun()
-
-            # 2. Edit Profile (inline expander)
-            with st.expander("Edit profile", icon=":material/person:"):
+            # 1. Edit Profile (inline expander)
+            with st.expander("Edit profile", icon=":material/edit:"):
                 new_name = st.text_input(
                     "Username", value=user_data["username"], key="tb_change_user"
                 )
@@ -158,12 +161,18 @@ def render_topbar(user_data, current_page_label: str, finance_service, auth_serv
                 icon=":material/logout:",
                 use_container_width=True,
             ):
-                token = cookies.get("wealthflow_remember_token")
-                auth_service.clear_session(token)
+                from components.auth_cookie import get_persisted_token, inject_clear_token_script
+                token = get_persisted_token(cookies)
                 if token:
+                    auth_service.clear_session(token)
+                try:
                     del cookies["wealthflow_remember_token"]
                     cookies.save()
+                except Exception:
+                    pass
+                inject_clear_token_script()
                 st.session_state.user = None
+                st.session_state.pop("_auth_save_token", None)
                 st.rerun()
 
 

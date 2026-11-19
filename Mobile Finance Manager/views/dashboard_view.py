@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from components.mobile_ui import fmt, m_section, m_empty, m_kpi_strip, style_mobile_plotly
+from components.mobile_ui import fmt, m_section, m_empty, m_kpi_strip, style_mobile_plotly, m_css_breakdown
 
 
 def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_service, budget_service):
@@ -155,7 +155,8 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
         for a in all_alerts[:max_show]:
             days = int(a["days"])
             cat = a["category"]
-            tone = "danger" if days <= 2 else ("warning" if days <= 5 else ("accent" if days <= 7 else "neutral"))
+            # Color code alerts: <= 2d: Red (danger), <= 10d: Orange (warning), > 10d: Green (positive)
+            tone = "danger" if days <= 2 else ("warning" if days <= 10 else "positive")
             due_txt = "Due today" if days <= 0 else f"In {days}d"
 
             c1, c2 = st.columns([0.68, 0.32], vertical_alignment="center")
@@ -178,7 +179,7 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
                 )
             with c2:
                 if cat == "Subscription":
-                    if st.button("Paid", icon=":material/check:", key=f"m_alert_sub_{a['id']}"):
+                    if st.button("Paid", key=f"m_alert_sub_{a['id']}", use_container_width=True):
                         finance_service.mark_alert_actioned(a["id"], uid)
                         finance_service.add_transaction(
                             amount=a["amount"], category_id="8", description=f"Auto: {a['name']}",
@@ -187,21 +188,31 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
                         st.session_state["m_toast"] = f"Marked {a['name']} paid!"
                         st.rerun()
                 elif cat == "EMI":
-                    if st.button("Paid", icon=":material/check:", key=f"m_alert_emi_{a['id']}"):
+                    if st.button("Paid", key=f"m_alert_emi_{a['id']}", use_container_width=True):
                         credit_card_service.mark_emi_paid(a["id"])
                         st.session_state["m_toast"] = "EMI payment recorded!"
                         st.rerun()
                 elif cat == "Loan":
-                    lbl = "Receive" if "Given" in a["name"] else "Paid"
-                    if st.button(lbl, icon=":material/check:", key=f"m_alert_loan_{a['id']}"):
-                        if a.get("is_emi"):
-                            loan_service.toggle_payment_status(a["id"], "pending")
-                        else:
-                            loan_service.update_loan_status(a["id"], "paid")
-                        st.session_state["m_toast"] = f"Loan updated ({lbl})!"
-                        st.rerun()
+                    is_given = "Given" in a["name"]
+                    if is_given:
+                        # For receive: no check icon, only text, green hover, same pill size
+                        if st.button("Receive", key=f"m_alert_receive_{a['id']}", use_container_width=True):
+                            if a.get("is_emi"):
+                                loan_service.toggle_payment_status(a["id"], "pending")
+                            else:
+                                loan_service.update_loan_status(a["id"], "paid")
+                            st.session_state["m_toast"] = "Loan marked received!"
+                            st.rerun()
+                    else:
+                        if st.button("Paid", key=f"m_alert_paid_{a['id']}", use_container_width=True):
+                            if a.get("is_emi"):
+                                loan_service.toggle_payment_status(a["id"], "pending")
+                            else:
+                                loan_service.update_loan_status(a["id"], "paid")
+                            st.session_state["m_toast"] = "Loan payment recorded!"
+                            st.rerun()
                 elif cat == "Bill":
-                    if st.button("Paid", icon=":material/check:", key=f"m_alert_bill_{a['id']}"):
+                    if st.button("Paid", key=f"m_alert_bill_{a['id']}", use_container_width=True):
                         credit_card_service.add_transaction(
                             uid, a["id"], a["amount"], f"Bill Payment: {a['name']}", "payment", sync_bank=True,
                         )
@@ -218,95 +229,133 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
                 st.session_state["m_alerts_expand"] = not expanded
                 st.rerun()
 
-    # Mobile Touch-Friendly Analytics Tabs
+    # Mobile Touch-Friendly Analytics with Lazy Loading (<100ms sub-tab switches)
     m_section("Analytics")
-    t_cat, t_day, t_ie, t_tr, t_wl, t_bu = st.tabs(["Category", "Daily", "In/Out", "Trend", "Wealth", "Budgets"])
 
-    with t_cat:
-        df_sp = finance_service.get_spending_by_category(uid, sel_year, sel_month, start_day=fiscal_start_day)
-        if not df_sp.empty:
-            top_df = df_sp.head(10).iloc[::-1]
-            fig = px.bar(top_df, y="Category", x="Amount", orientation="h", text_auto=".2s", color_discrete_sequence=["#4F86F7"])
-            style_mobile_plotly(fig, height=max(240, len(top_df) * 32 + 44))
-            fig.update_traces(textposition="outside", cliponaxis=False, marker_cornerradius=6)
-            fig.update_layout(yaxis=dict(showgrid=False, title=""), xaxis=dict(title="", showticklabels=False), margin=dict(l=6, r=48, t=12, b=16))
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            m_empty("No spending data", "Log an expense via the + button to see category breakdown.")
+    @st.fragment
+    def _render_analytics_fragment():
+        if "m_dash_tab" not in st.session_state:
+            st.session_state["m_dash_tab"] = "Category"
 
-    with t_day:
-        df_dy = finance_service.get_daily_spending_by_category(uid, sel_year, sel_month, start_day=fiscal_start_day)
-        if not df_dy.empty:
-            daily_tot = df_dy.groupby("Date", as_index=False)["Amount"].sum()
-            daily_tot["_dt"] = pd.to_datetime(daily_tot["Date"], errors="coerce")
-            daily_tot = daily_tot.dropna(subset=["_dt"]).sort_values("_dt").tail(14)
-            yrs_present = sorted(daily_tot["_dt"].dt.year.unique().tolist())
-            yr_lbl = str(yrs_present[0]) if len(yrs_present) == 1 else f"{yrs_present[0]}–{yrs_present[-1]}"
-            st.markdown(f'<span class="m-chip accent" style="margin-bottom:4px;">{yr_lbl} · Latest {len(daily_tot)} active days</span>', unsafe_allow_html=True)
-            daily_tot["DayLabel"] = daily_tot["_dt"].dt.strftime("%d %b")
-            fig_d = px.bar(daily_tot, x="DayLabel", y="Amount", text_auto=".2s", color_discrete_sequence=["#60A5FA"])
-            style_mobile_plotly(fig_d, height=255)
-            fig_d.update_traces(textposition="outside", cliponaxis=False, marker_cornerradius=5)
-            fig_d.update_layout(
-                xaxis=dict(type="category", title="", tickangle=-35, fixedrange=True),
-                yaxis=dict(title="", fixedrange=True),
-                margin=dict(l=8, r=12, t=24, b=46),
-            )
-            st.plotly_chart(fig_d, use_container_width=True, config={"displayModeBar": False})
-        else:
-            m_empty("No daily expenses", "Daily totals appear here once you log expenses.")
+        active_tab = st.segmented_control(
+            "Analytics View",
+            ["Category", "Daily", "In/Out", "Trend", "Wealth", "Budgets"],
+            default=st.session_state["m_dash_tab"],
+            label_visibility="collapsed",
+            key="m_dash_analytics_seg",
+        )
+        if active_tab is not None:
+            st.session_state["m_dash_tab"] = active_tab
+        cur_tab = st.session_state["m_dash_tab"]
 
-    with t_ie:
-        df_ie = finance_service.get_income_expense_by_month(uid, sel_year, sel_month)
-        if not df_ie.empty:
-            df_ie = df_ie.tail(6)
-            fig_ie = go.Figure()
-            fig_ie.add_trace(go.Bar(name="Income", x=df_ie["Month"], y=df_ie["Income"], marker_color="#34D399"))
-            fig_ie.add_trace(go.Bar(name="Expense", x=df_ie["Month"], y=df_ie["Expense"], marker_color="#F87171"))
-            style_mobile_plotly(fig_ie, height=255, show_legend=True)
-            fig_ie.update_layout(barmode="group", xaxis=dict(title="", tickangle=-25), yaxis=dict(title=""))
-            st.plotly_chart(fig_ie, use_container_width=True, config={"displayModeBar": False})
-        else:
-            m_empty("No cash flow data", "Log income and expenses to compare months.")
+        if cur_tab == "Category":
+            df_sp = finance_service.get_spending_by_category(uid, sel_year, sel_month, start_day=fiscal_start_day)
+            if not df_sp.empty:
+                tot_spend = float(df_sp["Amount"].sum()) or 1.0
+                top_df = df_sp.head(10)
+                items = [
+                    {
+                        "label": r["Category"],
+                        "amount_str": fmt(r["Amount"]),
+                        "pct": (float(r["Amount"]) / tot_spend) * 100,
+                        "color": "linear-gradient(90deg, #4F86F7, #60A5FA)",
+                    }
+                    for _, r in top_df.iterrows()
+                ]
+                m_css_breakdown(items, empty_title="No spending data", empty_sub="Log an expense via the + button to see category breakdown.")
+            else:
+                m_empty("No spending data", "Log an expense via the + button to see category breakdown.")
 
-    with t_tr:
-        df_tr = finance_service.get_spending_trend(uid, sel_year, sel_month, months=8)
-        if not df_tr.empty:
-            fig_tr = px.area(df_tr, x="Month", y="Amount", markers=True, color_discrete_sequence=["#4F86F7"])
-            style_mobile_plotly(fig_tr, height=250)
-            fig_tr.update_layout(xaxis=dict(title="", tickangle=-25), yaxis=dict(title=""))
-            st.plotly_chart(fig_tr, use_container_width=True, config={"displayModeBar": False})
-        else:
-            m_empty("No trend data", "Spending trend updates automatically each month.")
-
-    with t_wl:
-        asset_data = dash["asset_data"]
-        if asset_data:
-            wdf = pd.DataFrame(asset_data).sort_values("Amount", ascending=True)
-            fig_w = px.bar(wdf, y="Category", x="Amount", orientation="h", text_auto=".2s", color_discrete_sequence=["#34D399"])
-            style_mobile_plotly(fig_w, height=max(220, len(wdf) * 36 + 40))
-            fig_w.update_traces(textposition="outside", cliponaxis=False, marker_cornerradius=6)
-            fig_w.update_layout(yaxis=dict(showgrid=False, title=""), xaxis=dict(title="", showticklabels=False), margin=dict(l=6, r=48, t=12, b=16))
-            st.plotly_chart(fig_w, use_container_width=True, config={"displayModeBar": False})
-        else:
-            m_empty("No assets tracked", "Add assets under More → Assets to view wealth allocation.")
-
-    with t_bu:
-        now = datetime.now()
-        bm = sel_month if sel_month != "All" else now.month
-        by = sel_year if sel_year != "All" else now.year
-        df_b = budget_service.get_monthly_budgets(uid, bm, by)
-        if not df_b.empty:
-            for _, row in df_b.iterrows():
-                pct = min(1.0, max(0.0, float(row["Progress"]) / 100.0))
-                tone = "negative" if row["Progress"] >= 100 else ("warning" if row["Progress"] >= 80 else "positive")
-                st.markdown(
-                    f'<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:4px;">'
-                    f'<strong style="color:#F3F5F8;">{html.escape(str(row["Category"]))}</strong>'
-                    f'<span class="m-chip {tone} m-mono">{fmt(row["Spent"])} / {fmt(row["Limit"])}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
+        elif cur_tab == "Daily":
+            df_dy = finance_service.get_daily_spending_by_category(uid, sel_year, sel_month, start_day=fiscal_start_day)
+            if not df_dy.empty:
+                daily_tot = df_dy.groupby("Date", as_index=False)["Amount"].sum()
+                daily_tot["_dt"] = pd.to_datetime(daily_tot["Date"], errors="coerce")
+                # Show newest/today's date first on the left, up to 14 active days
+                daily_tot = daily_tot.dropna(subset=["_dt"]).sort_values("_dt", ascending=False).head(14)
+                yrs_present = sorted(daily_tot["_dt"].dt.year.unique().tolist())
+                yr_lbl = str(yrs_present[0]) if len(yrs_present) == 1 else f"{yrs_present[0]}–{yrs_present[-1]}"
+                st.markdown(f'<span class="m-chip accent" style="margin-bottom:4px;">{yr_lbl} · Latest {len(daily_tot)} active days (Newest first)</span>', unsafe_allow_html=True)
+                daily_tot["DayLabel"] = daily_tot["_dt"].dt.strftime("%d %b")
+                day_order = daily_tot["DayLabel"].tolist()
+                fig_d = px.bar(daily_tot, x="DayLabel", y="Amount", text_auto=".2s", color_discrete_sequence=["#60A5FA"])
+                style_mobile_plotly(fig_d, height=255)
+                fig_d.update_traces(textposition="outside", cliponaxis=False, marker_cornerradius=5)
+                fig_d.update_layout(
+                    xaxis=dict(
+                        type="category",
+                        title="",
+                        tickangle=-35,
+                        fixedrange=True,
+                        categoryorder="array",
+                        categoryarray=day_order,
+                    ),
+                    yaxis=dict(title="", fixedrange=True),
+                    margin=dict(l=8, r=12, t=24, b=46),
                 )
-                st.progress(pct)
-        else:
-            m_empty("No budgets set", "Create monthly category limits under More → Budgets.")
+                st.plotly_chart(fig_d, use_container_width=True, config={"displayModeBar": False})
+            else:
+                m_empty("No daily expenses", "Daily totals appear here once you log expenses.")
+
+        elif cur_tab == "In/Out":
+            df_ie = finance_service.get_income_expense_by_month(uid, sel_year, sel_month)
+            if not df_ie.empty:
+                df_ie = df_ie.tail(6)
+                fig_ie = go.Figure()
+                fig_ie.add_trace(go.Bar(name="Income", x=df_ie["Month"], y=df_ie["Income"], marker_color="#34D399"))
+                fig_ie.add_trace(go.Bar(name="Expense", x=df_ie["Month"], y=df_ie["Expense"], marker_color="#F87171"))
+                style_mobile_plotly(fig_ie, height=255, show_legend=True)
+                fig_ie.update_layout(barmode="group", xaxis=dict(title="", tickangle=-25), yaxis=dict(title=""))
+                st.plotly_chart(fig_ie, use_container_width=True, config={"displayModeBar": False})
+            else:
+                m_empty("No cash flow data", "Log income and expenses to compare months.")
+
+        elif cur_tab == "Trend":
+            df_tr = finance_service.get_spending_trend(uid, sel_year, sel_month, months=8)
+            if not df_tr.empty:
+                fig_tr = px.area(df_tr, x="Month", y="Amount", markers=True, color_discrete_sequence=["#4F86F7"])
+                style_mobile_plotly(fig_tr, height=250)
+                fig_tr.update_layout(xaxis=dict(title="", tickangle=-25), yaxis=dict(title=""))
+                st.plotly_chart(fig_tr, use_container_width=True, config={"displayModeBar": False})
+            else:
+                m_empty("No trend data", "Spending trend updates automatically each month.")
+
+        elif cur_tab == "Wealth":
+            asset_data = dash["asset_data"]
+            if asset_data:
+                wdf = pd.DataFrame(asset_data).sort_values("Amount", ascending=False)
+                tot_wealth = float(wdf["Amount"].sum()) or 1.0
+                w_items = [
+                    {
+                        "label": r["Category"],
+                        "amount_str": fmt(r["Amount"]),
+                        "pct": (float(r["Amount"]) / tot_wealth) * 100,
+                        "color": "linear-gradient(90deg, #10B981, #34D399)",
+                    }
+                    for _, r in wdf.iterrows()
+                ]
+                m_css_breakdown(w_items, empty_title="No assets tracked", empty_sub="Add assets under More → Assets to view wealth allocation.")
+            else:
+                m_empty("No assets tracked", "Add assets under More → Assets to view wealth allocation.")
+
+        elif cur_tab == "Budgets":
+            now = datetime.now()
+            bm = sel_month if sel_month != "All" else now.month
+            by = sel_year if sel_year != "All" else now.year
+            df_b = budget_service.get_monthly_budgets(uid, bm, by)
+            if not df_b.empty:
+                for _, row in df_b.iterrows():
+                    pct = min(1.0, max(0.0, float(row["Progress"]) / 100.0))
+                    tone = "negative" if row["Progress"] >= 100 else ("warning" if row["Progress"] >= 80 else "positive")
+                    st.markdown(
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:4px;">'
+                        f'<strong style="color:#F3F5F8;">{html.escape(str(row["Category"]))}</strong>'
+                        f'<span class="m-chip {tone} m-mono">{fmt(row["Spent"])} / {fmt(row["Limit"])}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.progress(pct)
+            else:
+                m_empty("No budgets set", "Create monthly category limits under More → Budgets.")
+
+    _render_analytics_fragment()

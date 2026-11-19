@@ -41,6 +41,7 @@ _M_WATCHED_MODULES = (
     "components.mobile_styles",
     "components.mobile_nav",
     "components.mobile_ui",
+    "components.auth_cookie",
     "views.auth_view",
     "views.dashboard_view",
     "views.quick_add_view",
@@ -139,25 +140,38 @@ LOGO_B64 = _load_logo_b64()
 # Apply Mobile Obsidian Fintech CSS (PWA JS bridge mounts at page end so zero iframe sits above top bar)
 apply_mobile_styles()
 
+from components.auth_cookie import get_persisted_token, inject_save_token_script
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+# Frame-1 synchronous check via native HTTP request cookies
+if not st.session_state.user:
+    req_token = get_persisted_token()
+    if req_token:
+        user_data = AuthService.validate_session(req_token)
+        if user_data:
+            st.session_state.user = user_data
+
 # Persistent Cookie + iOS PWA localStorage session manager
 cookies = scm.EncryptedCookieManager(
     password=st.secrets.get("COOKIE_PASSWORD", "wealthflow_pro_2026_secure"),
     path="/",
 )
-if not cookies.ready():
-    st.stop()
-
-if "user" not in st.session_state:
-    st.session_state.user = None
 
 if not st.session_state.user:
-    token = cookies.get("wealthflow_remember_token")
+    if not cookies.ready():
+        st.stop()
+    token = get_persisted_token(cookies)
     if not token:
         ls_token = st_javascript("localStorage.getItem('wealthflow_remember_token');")
         if ls_token and ls_token != "null" and isinstance(ls_token, str):
             token = ls_token
-            cookies["wealthflow_remember_token"] = token
-            cookies.save()
+            try:
+                cookies["wealthflow_remember_token"] = token
+                cookies.save()
+            except Exception:
+                pass
     if token:
         user_data = AuthService.validate_session(token)
         if user_data:
@@ -180,6 +194,11 @@ if not st.session_state.user:
 # Signed-in User State
 user_data = st.session_state.user
 uid = user_data["id"]
+
+# Ensure remember token is persistently mirrored to browser document.cookie & localStorage
+save_tok = st.session_state.pop("_auth_save_token", None)
+if save_tok:
+    inject_save_token_script(save_tok)
 
 if "sym" not in st.session_state:
     saved_sym = FinanceService.get_setting("currency_symbol", "₹", uid)
@@ -216,7 +235,7 @@ elif page == "Subscriptions":
 elif page == "Loans":
     render_loans_mobile(uid, LoanService)
 elif page == "Credit Cards":
-    render_credit_cards_mobile(uid, CreditCardService)
+    render_credit_cards_mobile(uid, CreditCardService, FinanceService)
 elif page == "Goals":
     render_goals_mobile(uid, GoalService)
 elif page == "Assets":

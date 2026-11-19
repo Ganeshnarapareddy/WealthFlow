@@ -157,7 +157,20 @@ def render_loans_mobile(uid: str, loan_service):
                         m_delete_popover(r["id"], f"mloan_{r['id']}", loan_service.delete_loan, str(r["person_name"]), pass_user_id=uid, toast_msg="Loan deleted.")
 
 
-def render_credit_cards_mobile(uid: str, cc_service):
+def render_credit_cards_mobile(uid: str, cc_service, finance_service=None):
+    unlink_cc = False
+    if finance_service:
+        unlink_cc = finance_service.get_setting("cc_unlink_transactions", "False", uid) == "True"
+
+    if unlink_cc:
+        st.markdown(
+            '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">'
+            '<span class="m-chip accent">EMIs Only</span>'
+            '<span style="font-size:12px;color:var(--m-ink-3);">Card swipe logging disabled per settings.</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
     cards = cc_service.get_cards(uid)
     with st.expander("Add credit card", icon=":material/add:"):
         with st.form("m_add_cc", clear_on_submit=True):
@@ -201,18 +214,19 @@ def render_credit_cards_mobile(uid: str, cc_service):
             m_delete_popover(card["id"], f"mcc_{card['id']}", cc_service.delete_card, str(card["name"]), pass_user_id=uid, toast_msg="Card deleted.")
         st.progress(min(1.0, max(0.0, util / 100.0)))
 
-        with st.expander(f"Log swipe or bill payment · {card['name']}"):
-            with st.form(f"m_cc_txn_{card['id']}", clear_on_submit=True):
-                ttype = st.radio("Type", ["expense", "payment"], horizontal=True, key=f"m_cct_{card['id']}")
-                tamt = st.number_input("Amount *", min_value=0.01, value=None, placeholder="0.00", key=f"m_cca_{card['id']}")
-                tdesc = st.text_input("Description", placeholder="Merchant or bill payment", key=f"m_ccd_{card['id']}")
-                if st.form_submit_button("Save", type="primary", use_container_width=True):
-                    if tamt and tamt > 0:
-                        cc_service.add_transaction(uid, card["id"], tamt, tdesc.strip() or ttype.title(), ttype, sync_bank=(ttype == "payment"))
-                        st.session_state["m_toast"] = f"Card {ttype} logged!"
-                        st.rerun()
-                    else:
-                        st.error("Enter a valid amount.")
+        if not unlink_cc:
+            with st.expander(f"Log swipe or bill payment · {card['name']}"):
+                with st.form(f"m_cc_txn_{card['id']}", clear_on_submit=True):
+                    ttype = st.radio("Type", ["expense", "payment"], horizontal=True, key=f"m_cct_{card['id']}")
+                    tamt = st.number_input("Amount *", min_value=0.01, value=None, placeholder="0.00", key=f"m_cca_{card['id']}")
+                    tdesc = st.text_input("Description", placeholder="Merchant or bill payment", key=f"m_ccd_{card['id']}")
+                    if st.form_submit_button("Save", type="primary", use_container_width=True):
+                        if tamt and tamt > 0:
+                            cc_service.add_transaction(uid, card["id"], tamt, tdesc.strip() or ttype.title(), ttype, sync_bank=(ttype == "payment"))
+                            st.session_state["m_toast"] = f"Card {ttype} logged!"
+                            st.rerun()
+                        else:
+                            st.error("Enter a valid amount.")
 
 
 def render_goals_mobile(uid: str, goal_service):
@@ -323,6 +337,105 @@ def render_settings_mobile(uid: str, user_data: dict, finance_service, auth_serv
             finance_service.set_setting("fiscal_month_start_day", str(int(fday)), uid)
             st.session_state["m_toast"] = f"Fiscal start day set to {int(fday)}."
             st.rerun()
+
+    m_section("Credit Card Settings")
+    unlink_cc = finance_service.get_setting("cc_unlink_transactions", "False", uid) == "True"
+    new_unlink = st.toggle(
+        "Unlink Transactions from Credit Card",
+        value=unlink_cc,
+        key="m_cc_unlink_pref",
+        help="When enabled, credit cards focus strictly on EMIs. Standard expense swipe logging is hidden.",
+    )
+    if new_unlink != unlink_cc:
+        finance_service.set_setting("cc_unlink_transactions", str(new_unlink), uid)
+        st.session_state["m_toast"] = f"Credit card transactions {'unlinked' if new_unlink else 'linked'}."
+        st.rerun()
+
+    m_section("Categories")
+    cat_view = st.segmented_control(
+        "Category Filter",
+        ["All", "Expense", "Income"],
+        default="All",
+        key="m_cat_filter_seg",
+        label_visibility="collapsed",
+    )
+
+    with st.expander("New category", icon=":material/add:"):
+        with st.form("m_new_cat_form", clear_on_submit=True):
+            c_name = st.text_input("Category Name *", placeholder="e.g. Dining Out, Freelance")
+            c_type = st.radio("Type", ["Expense", "Income"], horizontal=True, key="m_new_cat_type")
+            c_icon = st.text_input("Emoji / Icon", value="🏷️", max_chars=4, placeholder="e.g. 🍔, 🚗, 💼")
+            if st.form_submit_button("Add Category", type="primary", use_container_width=True):
+                if not c_name.strip():
+                    st.error("Category name is required.")
+                else:
+                    ok, msg = finance_service.add_category(c_name.strip(), c_type, c_icon.strip(), uid)
+                    if ok:
+                        st.session_state["m_toast"] = f"Category '{c_name.strip()}' added!"
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+    df_cats = finance_service.get_categories(uid)
+    if not df_cats.empty:
+        if cat_view and cat_view != "All":
+            df_cats = df_cats[df_cats["type"].str.lower() == cat_view.lower()]
+        with st.expander(f"View & Manage Categories ({len(df_cats)})", expanded=False, icon=":material/format_list_bulleted:"):
+            for _, row in df_cats.iterrows():
+                cid = row["id"]
+                cname = str(row["name"])
+                ctype = str(row["type"])
+                cicon = str(row["icon"] or "🏷️")
+                is_system = not row.get("user_id")
+                type_tone = "negative" if ctype.lower() == "expense" else "positive"
+
+                if is_system:
+                    st.markdown(
+                        f'<div class="m-list-card">'
+                        f'<div class="m-list-left">'
+                        f'<div class="m-list-icon">{html.escape(cicon)}</div>'
+                        f'<div style="min-width:0;"><div class="m-list-title">{html.escape(cname)}</div>'
+                        f'<div class="m-list-sub"><span class="m-chip {type_tone}">{html.escape(ctype)}</span>'
+                        f'<span class="m-chip neutral" style="margin-left:4px;">Core</span></div></div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    c_main, c_edit, c_del = st.columns([0.72, 0.14, 0.14], vertical_alignment="center")
+                    with c_main:
+                        st.markdown(
+                            f'<div class="m-list-card">'
+                            f'<div class="m-list-left">'
+                            f'<div class="m-list-icon">{html.escape(cicon)}</div>'
+                            f'<div style="min-width:0;"><div class="m-list-title">{html.escape(cname)}</div>'
+                            f'<div class="m-list-sub"><span class="m-chip {type_tone}">{html.escape(ctype)}</span>'
+                            f'<span class="m-chip accent" style="margin-left:4px;">Custom</span></div></div>'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with c_edit:
+                        with st.popover("", icon=":material/edit:", help=f"Edit {cname}"):
+                            with st.form(f"m_edit_cat_form_{cid}"):
+                                ed_name = st.text_input("Name", value=cname, key=f"m_ed_name_{cid}")
+                                ed_icon = st.text_input("Icon", value=cicon, max_chars=4, key=f"m_ed_ico_{cid}")
+                                if st.form_submit_button("Save", type="primary", use_container_width=True):
+                                    ok, msg = finance_service.update_category(cid, ed_name.strip(), ed_icon.strip(), uid)
+                                    if ok:
+                                        st.session_state["m_toast"] = f"Updated '{ed_name.strip()}'!"
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                    with c_del:
+                        m_delete_popover(
+                            cid,
+                            f"m_cat_del_{cid}",
+                            finance_service.delete_category,
+                            item_name=cname,
+                            pass_user_id=uid,
+                            toast_msg=f"Category '{cname}' deleted.",
+                        )
+    else:
+        m_empty("No categories", "Tap + to create a custom category.")
 
     m_section("Edit profile")
     with st.form("m_edit_prof_form"):

@@ -15,6 +15,8 @@ def apply_styles():
         /* waive: 58 (app screen dashboard, no marketing word budget per flow.md § App screens) */
 
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
         /* ============================================================
            1. TOKEN BLOCK — single source of truth (OKLCH, hue 245)
@@ -392,28 +394,33 @@ def apply_styles():
             width: 100%;
         }
 
-        /* Top-bar Profile Avatar Popover (circular person icon ONLY — zero arrow/chevron) */
-        .st-key-tb_profile_pop {
+        /* Top-bar Profile & Currency Popovers — rounded rectangles matching wf-cmd-trigger */
+        .st-key-tb_profile_pop,
+        .st-key-tb_curr_pop {
             display: flex !important;
             justify-content: flex-end !important;
         }
 
         .st-key-tb_profile_pop [data-testid="stPopover"] > div > button,
-        .st-key-tb_profile_pop button {
-            width: 38px !important;
-            min-width: 38px !important;
-            max-width: 38px !important;
-            height: 38px !important;
-            min-height: 38px !important;
-            padding: 0 !important;
-            gap: 0 !important;
-            border-radius: var(--radius-full) !important;
-            background-color: var(--color-paper-2) !important;
-            border: 1px solid var(--color-rule-strong) !important;
-            color: var(--color-ink-2) !important;
+        .st-key-tb_profile_pop button,
+        .st-key-tb_curr_pop [data-testid="stPopover"] > div > button,
+        .st-key-tb_curr_pop button {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
+            gap: 6px !important;
+            height: 34px !important;
+            min-height: 34px !important;
+            padding: 0 12px !important;
+            border-radius: var(--radius-md) !important;
+            background-color: var(--color-paper-2) !important;
+            border: 1px solid var(--color-rule) !important;
+            color: var(--color-ink) !important;
+            font-family: var(--font-body) !important;
+            font-size: var(--text-sm) !important;
+            font-weight: 500 !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
             transition:
                 background-color var(--dur-micro) var(--ease-out),
                 border-color var(--dur-micro) var(--ease-out),
@@ -422,22 +429,30 @@ def apply_styles():
                 transform var(--dur-press) var(--ease-out) !important;
         }
 
-        .st-key-tb_profile_pop button > div {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 0 !important;
-            padding: 0 !important;
+        .st-key-tb_profile_pop button [data-testid="stMarkdownContainer"] p,
+        .st-key-tb_curr_pop button [data-testid="stMarkdownContainer"] p {
+            color: inherit !important;
+            font-size: var(--text-sm) !important;
+            font-weight: 500 !important;
             margin: 0 !important;
+            line-height: 1 !important;
         }
 
-        /* Hide Streamlit's popover chevron arrow (both SVG & Material icon variants) */
-        .st-key-tb_profile_pop button svg,
-        .st-key-tb_profile_pop button > span,
-        .st-key-tb_profile_pop button > div:nth-child(n+2),
-        .st-key-tb_profile_pop button [data-testid="stPopoverIcon"],
-        .st-key-tb_profile_pop button [data-testid="stMarkdownContainer"] {
-            display: none !important;
+        .st-key-tb_profile_pop button [data-testid="stIconMaterial"],
+        .st-key-tb_curr_pop button [data-testid="stIconMaterial"] {
+            font-size: 18px !important;
+            line-height: 1 !important;
+            margin: 0 !important;
+            color: inherit !important;
+        }
+
+        @media (hover: hover) {
+            .st-key-tb_profile_pop button:hover,
+            .st-key-tb_curr_pop button:hover {
+                background-color: var(--color-paper-3) !important;
+                border-color: var(--color-rule-strong) !important;
+                color: var(--color-ink) !important;
+            }
         }
 
         /* Pin profile popover menu cleanly inside viewport right edge (overrides Popper translate3d overflow) */
@@ -449,14 +464,6 @@ def apply_styles():
             left: auto !important;
             transform: none !important;
             z-index: var(--z-tooltip) !important;
-        }
-
-        /* Keep ONLY the person icon crisp and centered */
-        .st-key-tb_profile_pop button [data-testid="stIconMaterial"] {
-            font-size: 20px !important;
-            line-height: 1 !important;
-            margin: 0 !important;
-            color: inherit !important;
         }
 
         @media (hover: hover) {
@@ -555,6 +562,42 @@ def apply_styles():
             font-size: var(--text-xs);
             font-weight: 500;
             color: var(--color-ink-2);
+        }
+
+        /* Topbar Currency & Profile Popovers (Rounded Rectangles matching Jump-To) */
+        [class*="st-key-tb_curr_pop"] [data-testid="stPopoverButton"],
+        [class*="st-key-tb_profile_pop"] [data-testid="stPopoverButton"] {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 6px !important;
+            height: 34px !important;
+            min-height: 34px !important;
+            padding: 0 12px !important;
+            background-color: var(--color-paper-2) !important;
+            border: 1px solid var(--color-rule) !important;
+            border-radius: var(--radius-md) !important;
+            color: var(--color-ink-2) !important;
+            font-family: var(--font-body) !important;
+            font-size: var(--text-sm) !important;
+            font-weight: 500 !important;
+            cursor: pointer !important;
+            box-shadow: none !important;
+            transition: all 0.15s ease !important;
+            white-space: nowrap !important;
+        }
+        [class*="st-key-tb_curr_pop"] [data-testid="stPopoverButton"]:hover,
+        [class*="st-key-tb_profile_pop"] [data-testid="stPopoverButton"]:hover {
+            background-color: var(--color-paper-3) !important;
+            border-color: var(--color-rule-strong) !important;
+            color: var(--color-ink) !important;
+        }
+        [class*="st-key-tb_curr_pop"] [data-testid="stPopoverButton"] p,
+        [class*="st-key-tb_profile_pop"] [data-testid="stPopoverButton"] p {
+            color: inherit !important;
+            font-size: var(--text-sm) !important;
+            font-weight: 500 !important;
+            margin: 0 !important;
         }
 
         .wf-avatar {
@@ -1327,8 +1370,45 @@ def apply_styles():
         }
         .wf-alert-row.tone-danger { border-left-color: var(--color-danger); }
         .wf-alert-row.tone-warning { border-left-color: var(--color-warning); }
+        .wf-alert-row.tone-positive { border-left-color: var(--color-positive); }
         .wf-alert-row.tone-accent { border-left-color: var(--color-accent); }
         .wf-alert-row.tone-muted { border-left-color: var(--color-ink-3); }
+
+        /* Alert Action Pill Buttons (Uniform size, Green hover on Receive, Red hover on Paid) */
+        [class*="st-key-alert_act_"] button {
+            height: 32px !important;
+            min-height: 32px !important;
+            padding: 0 14px !important;
+            border-radius: var(--radius-full) !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            white-space: nowrap !important;
+            transition: all 0.15s ease !important;
+        }
+        /* Hover Green for Receive */
+        [class*="st-key-alert_act_receive_"] button:hover {
+            background-color: rgba(16, 185, 129, 0.18) !important;
+            border-color: #10B981 !important;
+            color: #10B981 !important;
+        }
+        [class*="st-key-alert_act_receive_"] button:hover * {
+            color: #10B981 !important;
+        }
+        /* Hover Red for Paid */
+        [class*="st-key-alert_act_sub_"] button:hover,
+        [class*="st-key-alert_act_cc_emi_"] button:hover,
+        [class*="st-key-alert_act_cc_bill_"] button:hover,
+        [class*="st-key-alert_act_paid_"] button:hover {
+            background-color: rgba(239, 68, 68, 0.18) !important;
+            border-color: #EF4444 !important;
+            color: #EF4444 !important;
+        }
+        [class*="st-key-alert_act_sub_"] button:hover *,
+        [class*="st-key-alert_act_cc_emi_"] button:hover *,
+        [class*="st-key-alert_act_cc_bill_"] button:hover *,
+        [class*="st-key-alert_act_paid_"] button:hover * {
+            color: #EF4444 !important;
+        }
 
         .wf-alert-main {
             display: flex;
@@ -1371,6 +1451,7 @@ def apply_styles():
         }
         .wf-alert-due.tone-danger { background: var(--color-danger-low); color: var(--color-danger); }
         .wf-alert-due.tone-warning { background: var(--color-warning-low); color: var(--color-warning); }
+        .wf-alert-due.tone-positive { background: var(--color-positive-low); color: var(--color-positive); }
         .wf-alert-due.tone-accent { background: var(--color-accent-low); color: var(--color-accent); }
         .wf-alert-due.tone-muted { background: var(--color-paper-3); color: var(--color-ink-2); }
 
@@ -1531,16 +1612,22 @@ def apply_styles():
         .stButton button[kind="primary"],
         [data-testid="stFormSubmitButton"] button {
             background-color: var(--color-accent) !important;
-            color: var(--color-accent-ink) !important;
+            color: #FFFFFF !important;
             border-color: var(--color-transparent) !important;
             font-weight: 600 !important;
         }
 
         .stButton button[kind="primary"] *,
         .stButton button[kind="primary"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stFormSubmitButton"] button,
         [data-testid="stFormSubmitButton"] button *,
+        [data-testid="stFormSubmitButton"] button div,
+        [data-testid="stFormSubmitButton"] button p,
+        [data-testid="stFormSubmitButton"] button span,
         [data-testid="stFormSubmitButton"] button [data-testid="stMarkdownContainer"] p {
-            color: var(--color-accent-ink) !important;
+            color: #FFFFFF !important;
+            opacity: 1 !important;
+            visibility: visible !important;
         }
 
         @media (hover: hover) {

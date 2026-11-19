@@ -9,12 +9,12 @@ from database import db
 @st.cache_data(ttl=60, show_spinner=False)
 def _cached_categories(user_id, v: int):
     if user_id:
-        res = db.execute("SELECT id, name, type, icon FROM categories WHERE user_id IS NULL OR user_id = ? ORDER BY name", (user_id,))
+        res = db.execute("SELECT id, name, type, icon, user_id FROM categories WHERE user_id IS NULL OR user_id = ? ORDER BY name", (user_id,))
     else:
-        res = db.execute("SELECT id, name, type, icon FROM categories WHERE user_id IS NULL ORDER BY name")
+        res = db.execute("SELECT id, name, type, icon, user_id FROM categories WHERE user_id IS NULL ORDER BY name")
     if res and res.rows:
-        return pd.DataFrame(res.rows, columns=["id", "name", "type", "icon"])
-    return pd.DataFrame(columns=["id", "name", "type", "icon"])
+        return pd.DataFrame(res.rows, columns=["id", "name", "type", "icon", "user_id"])
+    return pd.DataFrame(columns=["id", "name", "type", "icon", "user_id"])
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -544,6 +544,52 @@ class FinanceService:
     @staticmethod
     def get_categories(user_id=None):
         return _cached_categories(user_id, db.version)
+
+    @staticmethod
+    def add_category(name: str, cat_type: str, icon: str, user_id: str):
+        name_clean = name.strip()
+        if not name_clean:
+            return False, "Category name cannot be empty."
+        existing = db.execute(
+            "SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND (user_id IS NULL OR user_id = ?)",
+            (name_clean, user_id)
+        )
+        if existing and existing.rows:
+            return False, f"Category '{name_clean}' already exists."
+        cid = str(uuid.uuid4())
+        icon_clean = (icon.strip() if icon and icon.strip() else "🏷️")[:8]
+        type_clean = "Expense" if cat_type.lower() == "expense" else "Income"
+        db.execute(
+            "INSERT INTO categories (id, user_id, name, type, icon) VALUES (?, ?, ?, ?, ?)",
+            (cid, user_id, name_clean, type_clean, icon_clean)
+        )
+        db.bump_version()
+        return True, "Category added successfully."
+
+    @staticmethod
+    def update_category(cat_id: str, name: str, icon: str, user_id: str):
+        name_clean = name.strip()
+        if not name_clean:
+            return False, "Category name cannot be empty."
+        own = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
+        if not own or not own.rows:
+            return False, "Cannot edit system categories or categories belonging to other users."
+        icon_clean = (icon.strip() if icon and icon.strip() else "🏷️")[:8]
+        db.execute(
+            "UPDATE categories SET name = ?, icon = ? WHERE id = ? AND user_id = ?",
+            (name_clean, icon_clean, str(cat_id), user_id)
+        )
+        db.bump_version()
+        return True, "Category updated successfully."
+
+    @staticmethod
+    def delete_category(cat_id: str, user_id: str):
+        own = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
+        if not own or not own.rows:
+            return False, "Cannot delete system categories."
+        db.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
+        db.bump_version()
+        return True, "Category deleted successfully."
 
     @staticmethod
     def is_alert_actioned(alert_id, user_id):

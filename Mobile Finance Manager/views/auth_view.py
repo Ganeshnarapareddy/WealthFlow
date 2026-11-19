@@ -39,9 +39,12 @@ def render_auth_view(logo_b64: str | None, auth_service, cookies, db):
                     if user:
                         if remember:
                             token = auth_service.create_session(user["id"])
-                            cookies["wealthflow_remember_token"] = token
-                            cookies.save()
-                            st_javascript(f"localStorage.setItem('wealthflow_remember_token', '{token}');")
+                            try:
+                                cookies["wealthflow_remember_token"] = token
+                                cookies.save()
+                            except Exception:
+                                pass
+                            st.session_state["_auth_save_token"] = token
                         st.session_state.user = user
                         st.session_state["m_page"] = "Home"
                         st.rerun()
