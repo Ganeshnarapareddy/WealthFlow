@@ -1374,15 +1374,47 @@ def apply_styles():
         .wf-alert-row.tone-accent { border-left-color: var(--color-accent); }
         .wf-alert-row.tone-muted { border-left-color: var(--color-ink-3); }
 
-        /* Alert Action Pill Buttons (Uniform size, Green hover on Receive, Red hover on Paid) */
+        /* Alert Action Pill Buttons (Uniform size, Centered, Green hover on Received, Red hover on Paid) */
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-alert_act_"]) {
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+        }
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-alert_act_"]) > [data-testid="column"]:first-child {
+            flex: 1 1 0px !important;
+            min-width: 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-alert_act_"]) > [data-testid="column"]:last-child {
+            flex: 0 0 94px !important;
+            width: 94px !important;
+            min-width: 94px !important;
+            max-width: 94px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        [class*="st-key-alert_act_"] {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
         [class*="st-key-alert_act_"] button {
+            width: 86px !important;
+            min-width: 86px !important;
+            max-width: 86px !important;
             height: 32px !important;
             min-height: 32px !important;
-            padding: 0 14px !important;
+            padding: 0 10px !important;
             border-radius: var(--radius-full) !important;
             font-size: 12px !important;
             font-weight: 600 !important;
             white-space: nowrap !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            margin: 0 auto !important;
             transition: all 0.15s ease !important;
         }
         /* Hover Green for Receive */

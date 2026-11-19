@@ -159,7 +159,7 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
             tone = "danger" if days <= 2 else ("warning" if days <= 10 else "positive")
             due_txt = "Due today" if days <= 0 else f"In {days}d"
 
-            c1, c2 = st.columns([0.68, 0.32], vertical_alignment="center")
+            c1, c2 = st.columns([0.76, 0.24], vertical_alignment="center")
             with c1:
                 st.markdown(
                     f"""
@@ -195,8 +195,8 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
                 elif cat == "Loan":
                     is_given = "Given" in a["name"]
                     if is_given:
-                        # For receive: no check icon, only text, green hover, same pill size
-                        if st.button("Receive", key=f"m_alert_receive_{a['id']}", use_container_width=True):
+                        # For received: no check icon, only text, green hover, same pill size
+                        if st.button("Received", key=f"m_alert_receive_{a['id']}", use_container_width=True):
                             if a.get("is_emi"):
                                 loan_service.toggle_payment_status(a["id"], "pending")
                             else:
@@ -222,7 +222,7 @@ def render_dashboard_view(uid: str, finance_service, credit_card_service, loan_s
         if len(all_alerts) > 5:
             expanded = st.session_state.get("m_alerts_expand", False)
             if st.button(
-                "Show fewer alerts" if expanded else f"View all {len(all_alerts)} alerts",
+                "View less" if expanded else "View more",
                 key="m_toggle_alerts",
                 use_container_width=True,
             ):

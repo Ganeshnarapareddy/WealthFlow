@@ -579,8 +579,8 @@ if page == "Dashboard":
                     elif cat == 'Loan':
                         is_given = "Given" in a['name']
                         if is_given:
-                            # For receive: no check icon, green hover, exact same pill size
-                            if st.button("Receive", key=f"alert_act_receive_{a['id']}", use_container_width=True):
+                            # For received: no check icon, green hover, exact same pill size
+                            if st.button("Received", key=f"alert_act_receive_{a['id']}", use_container_width=True):
                                 if a.get('is_emi'):
                                     LoanService.toggle_payment_status(a['id'], "pending")
                                 else:

@@ -781,18 +781,75 @@ def apply_mobile_styles():
         .m-alert-row.tone-positive { border-left-color: #10B981 !important; }
         .m-alert-row.tone-accent { border-left-color: var(--m-accent); }
 
-        /* Alert Action Pill Buttons (Uniform size, Green hover on Receive, Red hover on Paid) */
-        [class*="st-key-m_alert_"] button {
+        /* Ensure all alert rows have identical left card and right button column widths */
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-m_alert_"]) {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            width: 100% !important;
+        }
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-m_alert_"]) > [data-testid="column"]:first-child {
+            flex: 1 1 0px !important;
+            min-width: 0 !important;
+            width: auto !important;
+        }
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-m_alert_"]) > [data-testid="column"]:last-child {
+            flex: 0 0 84px !important;
+            width: 84px !important;
+            min-width: 84px !important;
+            max-width: 84px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+
+        /* Alert Action Pill Buttons (Uniform pill size, Centered, Green hover on Received, Red hover on Paid) */
+        [class*="st-key-m_alert_"] {
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        [class*="st-key-m_alert_"] button,
+        [class*="st-key-m_alert_"] .stButton > button,
+        [class*="st-key-m_alert_"] [data-testid="stBaseButton-secondary"] {
+            width: 80px !important;
+            min-width: 80px !important;
+            max-width: 80px !important;
             height: 32px !important;
             min-height: 32px !important;
-            padding: 0 14px !important;
+            max-height: 32px !important;
+            padding: 0 8px !important;
             border-radius: var(--m-rad-full) !important;
+            background-color: var(--m-surface-2) !important;
+            border: 1px solid var(--m-border-strong) !important;
+            color: var(--m-ink-1) !important;
+            font-family: var(--m-font-ui) !important;
             font-size: 12px !important;
             font-weight: 600 !important;
+            line-height: 1 !important;
             white-space: nowrap !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            margin: 0 auto !important;
             transition: all 0.15s ease !important;
         }
-        /* Hover Green for Receive */
+        [class*="st-key-m_alert_"] button [data-testid="stMarkdownContainer"] p,
+        [class*="st-key-m_alert_"] button [data-testid="stMarkdownContainer"] span {
+            font-family: var(--m-font-ui) !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            line-height: 1 !important;
+            color: inherit !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            text-align: center !important;
+        }
+        /* Hover Green for Received */
         [class*="st-key-m_alert_receive_"] button:hover {
             background-color: rgba(16, 185, 129, 0.2) !important;
             border-color: #10B981 !important;
@@ -842,65 +899,7 @@ def apply_mobile_styles():
             white-space: nowrap !important;
         }
 
-        /* Compact Alert Action Button (Receive / Paid) — exact 13px font and size matching left side */
-        [class*="st-key-m_alert_"] {
-            width: 100% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: flex-end !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        [class*="st-key-m_alert_"] button,
-        [class*="st-key-m_alert_"] .stButton > button,
-        [class*="st-key-m_alert_"] [data-testid="stBaseButton-secondary"] {
-            height: 32px !important;
-            min-height: 32px !important;
-            max-height: 32px !important;
-            padding: 0 8px !important;
-            border-radius: 8px !important;
-            background-color: var(--m-surface-2) !important;
-            border: 1px solid var(--m-border-strong) !important;
-            color: var(--m-ink-1) !important;
-            font-family: var(--m-font-ui) !important;
-            font-size: 13px !important;
-            font-weight: 600 !important;
-            line-height: 1 !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 4px !important;
-            white-space: nowrap !important;
-            transition: all var(--m-dur) var(--m-ease) !important;
-        }
-        [class*="st-key-m_alert_"] button [data-testid="stMarkdownContainer"] p,
-        [class*="st-key-m_alert_"] button [data-testid="stMarkdownContainer"] span:not([data-testid="stIconMaterial"]) {
-            font-family: var(--m-font-ui) !important;
-            font-size: 13px !important;
-            font-weight: 600 !important;
-            line-height: 1 !important;
-            color: inherit !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        [class*="st-key-m_alert_"] button [data-testid="stIconMaterial"],
-        [class*="st-key-m_alert_"] button svg {
-            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
-            font-size: 16px !important;
-            width: 16px !important;
-            height: 16px !important;
-            line-height: 16px !important;
-            vertical-align: middle !important;
-            display: inline-block !important;
-        }
-        [class*="st-key-m_alert_"] button:hover {
-            background-color: var(--m-success-low) !important;
-            border-color: var(--m-success-mid) !important;
-            color: var(--m-success) !important;
-        }
-        [class*="st-key-m_alert_"] button:hover * {
-            color: var(--m-success) !important;
-        }
+
 
         /* Compact Ledger / List Card */
         .m-list-card {
