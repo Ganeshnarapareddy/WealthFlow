@@ -8,13 +8,14 @@ from database import db
 def _cached_monthly_budgets(user_id: str, month: int, year: int, v: int):
     pattern = f"{year}-{month:02d}%"
     query = """
-        SELECT b.id, c.name, c.icon, b.amount_limit,
+        SELECT b.id, COALESCE(o.name, c.name) as name, COALESCE(o.icon, c.icon) as icon, b.amount_limit,
                COALESCE(
                    (SELECT SUM(t.amount) FROM transactions t
                     WHERE t.user_id = ? AND t.category_id = c.id AND t.type='Expense' AND t.date LIKE ?), 0
                ) AS spent
         FROM budgets b
         JOIN categories c ON b.category_id = c.id
+        LEFT JOIN user_category_overrides o ON c.id = o.category_id AND o.user_id = b.user_id
         WHERE b.user_id = ? AND b.month = ? AND b.year = ?
     """
     res = db.execute(query, (user_id, pattern, user_id, month, year))

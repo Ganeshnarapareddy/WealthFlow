@@ -9,12 +9,28 @@ from database import db
 @st.cache_data(ttl=60, show_spinner=False)
 def _cached_categories(user_id, v: int):
     if user_id:
-        res = db.execute("SELECT id, name, type, icon, user_id FROM categories WHERE user_id IS NULL OR user_id = ? ORDER BY name", (user_id,))
+        query = """
+            SELECT c.id, 
+                   COALESCE(o.name, c.name) as name, 
+                   c.type, 
+                   COALESCE(o.icon, c.icon) as icon, 
+                   c.user_id,
+                   CASE WHEN c.user_id IS NOT NULL THEN 'custom'
+                        WHEN o.name IS NOT NULL THEN 'overridden'
+                        ELSE 'system' END as origin
+            FROM categories c
+            LEFT JOIN user_category_overrides o 
+              ON c.id = o.category_id AND o.user_id = ?
+            WHERE c.user_id IS NULL OR c.user_id = ?
+            ORDER BY name
+        """
+        res = db.execute(query, (user_id, user_id))
     else:
-        res = db.execute("SELECT id, name, type, icon, user_id FROM categories WHERE user_id IS NULL ORDER BY name")
+        query = "SELECT id, name, type, icon, user_id, 'system' as origin FROM categories WHERE user_id IS NULL ORDER BY name"
+        res = db.execute(query)
     if res and res.rows:
-        return pd.DataFrame(res.rows, columns=["id", "name", "type", "icon", "user_id"])
-    return pd.DataFrame(columns=["id", "name", "type", "icon", "user_id"])
+        return pd.DataFrame(res.rows, columns=["id", "name", "type", "icon", "user_id", "origin"])
+    return pd.DataFrame(columns=["id", "name", "type", "icon", "user_id", "origin"])
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -75,12 +91,13 @@ def _cached_filtered_transactions(user_id, year, month, day, txn_type, descripti
     query = f"""
         SELECT id, date, description, amount, category, icon, type, source FROM (
             SELECT t.id, t.date, t.description, t.amount,
-                   COALESCE(c.name, 'Other') AS category,
-                   COALESCE(c.icon, '❔') AS icon,
+                   COALESCE(o.name, c.name, 'Other') AS category,
+                   COALESCE(o.icon, c.icon, '❔') AS icon,
                    COALESCE(t.type, 'Expense') AS type,
                    'main' as source, t.user_id
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
+            LEFT JOIN user_category_overrides o ON c.id = o.category_id AND o.user_id = t.user_id
             UNION ALL
             SELECT ct.id, ct.date, ct.description, ct.amount,
                    'Credit Card' as category, '💳' as icon, 'Expense' as type,
@@ -102,7 +119,11 @@ def _cached_filtered_transactions(user_id, year, month, day, txn_type, descripti
 def _cached_spending_by_category(user_id, year, month, start_day, v: int):
     query = """
         SELECT Category, SUM(Amount) as Amount FROM (
-            SELECT (SELECT name FROM categories WHERE id = t.category_id) as Category, amount as Amount, date, user_id, type
+            SELECT (SELECT COALESCE(o.name, c.name, 'Other')
+                    FROM categories c
+                    LEFT JOIN user_category_overrides o ON c.id = o.category_id AND o.user_id = t.user_id
+                    WHERE c.id = t.category_id) as Category,
+                   amount as Amount, date, user_id, type
             FROM transactions t
             UNION ALL
             SELECT 'Credit Card' as Category, amount as Amount, date, user_id, txn_type as type
@@ -134,7 +155,10 @@ def _cached_daily_spending(user_id, year, month, start_day, v: int):
     query = """
         SELECT Date, Category, SUM(Amount) as Amount FROM (
             SELECT SUBSTR(date, 1, 10) as Date,
-                   (SELECT name FROM categories WHERE id = t.category_id) as Category,
+                   (SELECT COALESCE(o.name, c.name, 'Other')
+                    FROM categories c
+                    LEFT JOIN user_category_overrides o ON c.id = o.category_id AND o.user_id = t.user_id
+                    WHERE c.id = t.category_id) as Category,
                    amount as Amount, user_id, type
             FROM transactions t
             UNION ALL
@@ -551,8 +575,10 @@ class FinanceService:
         if not name_clean:
             return False, "Category name cannot be empty."
         existing = db.execute(
-            "SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND (user_id IS NULL OR user_id = ?)",
-            (name_clean, user_id)
+            """SELECT c.id FROM categories c 
+               LEFT JOIN user_category_overrides o ON c.id = o.category_id AND o.user_id = ?
+               WHERE LOWER(COALESCE(o.name, c.name)) = LOWER(?) AND (c.user_id IS NULL OR c.user_id = ?)""",
+            (user_id, name_clean, user_id)
         )
         if existing and existing.rows:
             return False, f"Category '{name_clean}' already exists."
@@ -571,25 +597,47 @@ class FinanceService:
         name_clean = name.strip()
         if not name_clean:
             return False, "Category name cannot be empty."
-        own = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
-        if not own or not own.rows:
-            return False, "Cannot edit system categories or categories belonging to other users."
         icon_clean = (icon.strip() if icon and icon.strip() else "🏷️")[:8]
-        db.execute(
-            "UPDATE categories SET name = ?, icon = ? WHERE id = ? AND user_id = ?",
-            (name_clean, icon_clean, str(cat_id), user_id)
-        )
-        db.bump_version()
-        return True, "Category updated successfully."
+
+        # 1. Custom category owned by this user -> update directly in categories table
+        own = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
+        if own and own.rows:
+            db.execute(
+                "UPDATE categories SET name = ?, icon = ? WHERE id = ? AND user_id = ?",
+                (name_clean, icon_clean, str(cat_id), user_id)
+            )
+            db.bump_version()
+            return True, "Category updated successfully."
+
+        # 2. System category (user_id IS NULL) -> store per-user override in user_category_overrides
+        sys_cat = db.execute("SELECT id FROM categories WHERE id = ? AND user_id IS NULL", (str(cat_id),))
+        if sys_cat and sys_cat.rows:
+            db.execute(
+                "INSERT OR REPLACE INTO user_category_overrides (user_id, category_id, name, icon) VALUES (?, ?, ?, ?)",
+                (user_id, str(cat_id), name_clean, icon_clean)
+            )
+            db.bump_version()
+            return True, "Category customized successfully."
+
+        return False, "Category not found or belongs to another user."
 
     @staticmethod
     def delete_category(cat_id: str, user_id: str):
+        # 1. Custom category owned by this user -> delete permanently
         own = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
-        if not own or not own.rows:
-            return False, "Cannot delete system categories."
-        db.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
-        db.bump_version()
-        return True, "Category deleted successfully."
+        if own and own.rows:
+            db.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (str(cat_id), user_id))
+            db.bump_version()
+            return True, "Custom category deleted."
+
+        # 2. System category override -> remove override (resets back to system default)
+        ovr = db.execute("SELECT category_id FROM user_category_overrides WHERE category_id = ? AND user_id = ?", (str(cat_id), user_id))
+        if ovr and ovr.rows:
+            db.execute("DELETE FROM user_category_overrides WHERE category_id = ? AND user_id = ?", (str(cat_id), user_id))
+            db.bump_version()
+            return True, "Category reset to system default."
+
+        return False, "Cannot delete built-in system categories."
 
     @staticmethod
     def is_alert_actioned(alert_id, user_id):

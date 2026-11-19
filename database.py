@@ -138,6 +138,9 @@ class TursoManager:
             """CREATE TABLE IF NOT EXISTS settings (
                 key TEXT, user_id TEXT, value TEXT,
                 PRIMARY KEY (key, user_id))""",
+            """CREATE TABLE IF NOT EXISTS user_category_overrides (
+                user_id TEXT, category_id TEXT, name TEXT, icon TEXT,
+                PRIMARY KEY (user_id, category_id))""",
             """CREATE TABLE IF NOT EXISTS loans (
                 id TEXT PRIMARY KEY, user_id TEXT, person_name TEXT, amount REAL,
                 loan_type TEXT, interest_rate REAL DEFAULT 0,

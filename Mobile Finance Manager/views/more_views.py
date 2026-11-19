@@ -382,24 +382,72 @@ def render_settings_mobile(uid: str, user_data: dict, finance_service, auth_serv
             df_cats = df_cats[df_cats["type"].str.lower() == cat_view.lower()]
         with st.expander(f"View & Manage Categories ({len(df_cats)})", expanded=False, icon=":material/format_list_bulleted:"):
             for _, row in df_cats.iterrows():
-                cid = row["id"]
+                cid = str(row["id"])
                 cname = str(row["name"])
                 ctype = str(row["type"])
                 cicon = str(row["icon"] or "🏷️")
-                is_system = not row.get("user_id")
+                origin = str(row.get("origin") or "system")
                 type_tone = "negative" if ctype.lower() == "expense" else "positive"
 
-                if is_system:
-                    st.markdown(
-                        f'<div class="m-list-card">'
-                        f'<div class="m-list-left">'
-                        f'<div class="m-list-icon">{html.escape(cicon)}</div>'
-                        f'<div style="min-width:0;"><div class="m-list-title">{html.escape(cname)}</div>'
-                        f'<div class="m-list-sub"><span class="m-chip {type_tone}">{html.escape(ctype)}</span>'
-                        f'<span class="m-chip neutral" style="margin-left:4px;">Core</span></div></div>'
-                        f'</div></div>',
-                        unsafe_allow_html=True,
-                    )
+                if origin == "system":
+                    c_main, c_edit = st.columns([0.84, 0.16], vertical_alignment="center")
+                    with c_main:
+                        st.markdown(
+                            f'<div class="m-list-card">'
+                            f'<div class="m-list-left">'
+                            f'<div class="m-list-icon">{html.escape(cicon)}</div>'
+                            f'<div style="min-width:0;"><div class="m-list-title">{html.escape(cname)}</div>'
+                            f'<div class="m-list-sub"><span class="m-chip {type_tone}">{html.escape(ctype)}</span>'
+                            f'<span class="m-chip neutral" style="margin-left:4px;">Core</span></div></div>'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with c_edit:
+                        with st.popover("", icon=":material/edit:", help=f"Customize {cname}"):
+                            with st.form(f"m_edit_cat_form_{cid}"):
+                                ed_name = st.text_input("Name", value=cname, key=f"m_ed_name_{cid}")
+                                ed_icon = st.text_input("Icon", value=cicon, max_chars=4, key=f"m_ed_ico_{cid}")
+                                if st.form_submit_button("Save", type="primary", use_container_width=True):
+                                    ok, msg = finance_service.update_category(cid, ed_name.strip(), ed_icon.strip(), uid)
+                                    if ok:
+                                        st.session_state["m_toast"] = f"Customized to '{ed_name.strip()}'!"
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                elif origin == "overridden":
+                    c_main, c_edit, c_del = st.columns([0.72, 0.14, 0.14], vertical_alignment="center")
+                    with c_main:
+                        st.markdown(
+                            f'<div class="m-list-card">'
+                            f'<div class="m-list-left">'
+                            f'<div class="m-list-icon">{html.escape(cicon)}</div>'
+                            f'<div style="min-width:0;"><div class="m-list-title">{html.escape(cname)}</div>'
+                            f'<div class="m-list-sub"><span class="m-chip {type_tone}">{html.escape(ctype)}</span>'
+                            f'<span class="m-chip accent" style="margin-left:4px;">Customized</span></div></div>'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with c_edit:
+                        with st.popover("", icon=":material/edit:", help=f"Edit {cname}"):
+                            with st.form(f"m_edit_cat_form_{cid}"):
+                                ed_name = st.text_input("Name", value=cname, key=f"m_ed_name_{cid}")
+                                ed_icon = st.text_input("Icon", value=cicon, max_chars=4, key=f"m_ed_ico_{cid}")
+                                if st.form_submit_button("Save", type="primary", use_container_width=True):
+                                    ok, msg = finance_service.update_category(cid, ed_name.strip(), ed_icon.strip(), uid)
+                                    if ok:
+                                        st.session_state["m_toast"] = f"Updated to '{ed_name.strip()}'!"
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                    with c_del:
+                        m_delete_popover(
+                            cid,
+                            f"m_cat_del_{cid}",
+                            finance_service.delete_category,
+                            item_name=f"{cname} (reset to default)",
+                            pass_user_id=uid,
+                            toast_msg=f"Reset '{cname}' to system default.",
+                        )
                 else:
                     c_main, c_edit, c_del = st.columns([0.72, 0.14, 0.14], vertical_alignment="center")
                     with c_main:

@@ -2497,18 +2497,35 @@ elif page == "Settings":
     if not df_cats.empty:
         with st.expander("📋 View & Manage Existing Categories", expanded=False):
             for _, row in df_cats.iterrows():
-                c1, c2, c3 = st.columns([3, 1, 5])
+                cid = str(row['id'])
+                cname = str(row['name'])
+                ctype = str(row['type'])
+                cicon = str(row['icon'] or '🏷️')
+                origin = str(row.get('origin') or 'system')
+
+                c1, c2, c3 = st.columns([0.65, 0.18, 0.17], vertical_alignment="center")
                 with c1:
-                    st.markdown(f"{row['icon']} **{row['name']}** ({row['type']})")
+                    badge = "Core" if origin == "system" else ("Customized" if origin == "overridden" else "Custom")
+                    st.markdown(f"{cicon} **{cname}** ({ctype}) · `{badge}`")
                 with c2:
-                    if st.button("🗑️", key=f"del_cat_{row['id']}"):
-                        # Verify ownership
-                        res = db.execute("SELECT id FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
-                        if res and res.rows:
-                            db.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (row['id'], uid))
+                    with st.popover("✏️ Edit", key=f"d_ed_cat_pop_{cid}"):
+                        with st.form(f"d_ed_cat_form_{cid}"):
+                            d_name = st.text_input("Name", value=cname, key=f"d_name_{cid}")
+                            d_icon = st.text_input("Icon", value=cicon, max_chars=4, key=f"d_icon_{cid}")
+                            if st.form_submit_button("Save", type="primary", use_container_width=True):
+                                ok, msg = FinanceService.update_category(cid, d_name.strip(), d_icon.strip(), uid)
+                                if ok:
+                                    st.toast(f"Updated '{d_name.strip()}'!")
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                with c3:
+                    if origin in ("custom", "overridden"):
+                        lbl = "Reset" if origin == "overridden" else "Delete"
+                        if st.button(f"🗑️ {lbl}", key=f"del_cat_{cid}"):
+                            FinanceService.delete_category(cid, uid)
+                            st.toast(f"Category {lbl.lower()} successful.")
                             st.rerun()
-                        else:
-                            st.error("Cannot delete system categories.")
                 st.divider()
 
 elif page == "Admin" and st.session_state.user['role'] == 'admin':
