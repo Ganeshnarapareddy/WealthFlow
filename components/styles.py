@@ -1920,6 +1920,22 @@ def apply_styles():
             color: var(--color-danger);
         }
 
+        .wf-cc-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1px 7px;
+            margin-right: 6px;
+            background-color: rgba(245, 158, 11, 0.18);
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: #FBBF24;
+            vertical-align: middle;
+        }
+
         /* Login / Auth surface */
         .auth-container {
             max-width: 420px;

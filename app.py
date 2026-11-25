@@ -1032,6 +1032,11 @@ elif page == "Transactions":
             dt = st.date_input("Date", value=datetime.now().date(), key=f"txn_dt_{v}")
             cat_sel = st.selectbox("Category", list(cat_opts.keys()) if cat_opts else ["-"], index=0, key=f"txn_cat_{v}")
             desc = st.text_input("Description", value="", placeholder="What was this for?", key=f"txn_desc_{v}")
+            paid_by_cc_d = (
+                st.checkbox("Paid by CC", value=False, key=f"txn_cc_{v}")
+                if txn_type == "Expense"
+                else False
+            )
             if st.form_submit_button("Record Transaction", use_container_width=True, type="primary"):
                 if amt is None or amt <= 0:
                     st.error("Please enter an amount greater than 0.")
@@ -1039,9 +1044,18 @@ elif page == "Transactions":
                     st.error("Please select a category.")
                 else:
                     full_dt = datetime.combine(dt, datetime.now().time())
-                    FinanceService.add_transaction(amt, cat_opts[cat_sel], desc.strip(), full_dt, txn_type, uid)
+                    FinanceService.add_transaction(
+                        amt,
+                        cat_opts[cat_sel],
+                        desc.strip(),
+                        full_dt,
+                        txn_type,
+                        uid,
+                        paid_by_cc=paid_by_cc_d,
+                    )
                     st.session_state['txn_form_v'] = v + 1
-                    st.session_state['txn_logged_msg'] = f"Transaction logged: {fmt(amt)} ({cat_sel})"
+                    cc_note = " · CC" if paid_by_cc_d else ""
+                    st.session_state['txn_logged_msg'] = f"Transaction logged: {fmt(amt)} ({cat_sel}{cc_note})"
                     st.rerun(scope="fragment")
 
     with t1:
@@ -1072,12 +1086,15 @@ elif page == "Transactions":
         with f4:
             t_opts = ["All", "Expense", "Income"]
             sel_t = st.selectbox("Type", t_opts, key="hist_type")
+
+        cc_only_d = st.checkbox("Paid with CC only", value=False, key="hist_cc_only")
             
         st.divider()
         
         df_hist = FinanceService.get_filtered_transactions(
             uid, year=sel_y, month=sel_m, day=sel_d, txn_type=sel_t, 
-            description_search=sel_desc, category_name=sel_cat, limit=100
+            description_search=sel_desc, category_name=sel_cat, limit=100,
+            cc_filter="Paid with CC only" if cc_only_d else "All",
         )
         if not df_hist.empty:
             for _, row in df_hist.iterrows():
@@ -1087,7 +1104,8 @@ elif page == "Transactions":
                     st.markdown(f"**{row['Description']}**")
                     color = "#f87171" if row['Type'] == 'Expense' else "#4ade80"
                     sign = "-" if row['Type'] == 'Expense' else "+"
-                    st.markdown(f"<span style='color:{color}; font-weight:bold;'>{sign}{fmt(row['Amount'])}</span> • {row['Category']} • {row['Date']}", unsafe_allow_html=True)
+                    cc_tag = "<span class='wf-cc-badge'>CC</span>" if row.get('PaidByCC') else ""
+                    st.markdown(f"{cc_tag}<span style='color:{color}; font-weight:bold;'>{sign}{fmt(row['Amount'])}</span> • {row['Category']} • {row['Date']}", unsafe_allow_html=True)
                 with c3:
                     if st.button("", icon=":material/delete_outline:", help="Delete transaction", key=f"del_txn_{row['ID']}_{row['Source']}"):
                         if row['Source'] == 'main':

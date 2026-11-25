@@ -121,7 +121,8 @@ class TursoManager:
             """CREATE TABLE IF NOT EXISTS transactions (
                 id TEXT PRIMARY KEY, user_id TEXT, account_id TEXT,
                 category_id TEXT, amount REAL, type TEXT,
-                date TEXT, description TEXT)""",
+                date TEXT, description TEXT,
+                paid_by_cc INTEGER DEFAULT 0)""",
             """CREATE TABLE IF NOT EXISTS budgets (
                 id TEXT PRIMARY KEY, user_id TEXT, category_id TEXT,
                 amount_limit REAL, month INTEGER, year INTEGER)""",
@@ -254,6 +255,8 @@ class TursoManager:
             table_cols[t] = {row[1] for row in r.rows} if (r and r.rows) else set()
 
         alter_stmts = []
+        if 'paid_by_cc' not in table_cols['transactions']:
+            alter_stmts.append("ALTER TABLE transactions ADD COLUMN paid_by_cc INTEGER DEFAULT 0")
         if 'linked_txn_id' not in table_cols['credit_card_transactions']:
             alter_stmts.append("ALTER TABLE credit_card_transactions ADD COLUMN linked_txn_id TEXT")
         if 'tenure' not in table_cols['loans']:
@@ -337,9 +340,9 @@ class TursoManager:
             logger.warning(f"Note: Could not ensure default admin user/account: {e}")
 
 @st.cache_resource
-def get_db_instance(v=5):
+def get_db_instance(v=6):
     manager = TursoManager()
     manager.initialize_schema()
     return manager
 
-db = get_db_instance(v=5)
+db = get_db_instance(v=6)

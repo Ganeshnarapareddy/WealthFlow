@@ -65,7 +65,7 @@ def _cached_available_years(user_id: str, v: int):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _cached_filtered_transactions(user_id, year, month, day, txn_type, description_search, category_name, limit, v: int):
+def _cached_filtered_transactions(user_id, year, month, day, txn_type, description_search, category_name, limit, v: int, cc_filter="All"):
     conditions = ["user_id = ?"]
     params = [user_id]
     if txn_type and txn_type != "All":
@@ -86,22 +86,30 @@ def _cached_filtered_transactions(user_id, year, month, day, txn_type, descripti
     if category_name and category_name != "All":
         conditions.append("category = ?")
         params.append(category_name)
+    if cc_filter == "Paid with CC only":
+        conditions.append("paid_by_cc = 1")
+    elif cc_filter == "Non-CC only":
+        conditions.append("paid_by_cc = 0")
 
     where_clause = " WHERE " + " AND ".join(conditions)
     query = f"""
-        SELECT id, date, description, amount, category, icon, type, source FROM (
+        SELECT id, date, description, amount, category, icon, type, source, paid_by_cc FROM (
             SELECT t.id, t.date, t.description, t.amount,
                    COALESCE(o.name, c.name, 'Other') AS category,
                    COALESCE(o.icon, c.icon, '❔') AS icon,
                    COALESCE(t.type, 'Expense') AS type,
-                   'main' as source, t.user_id
+                   'main' as source,
+                   COALESCE(t.paid_by_cc, 0) as paid_by_cc,
+                   t.user_id
             FROM transactions t
             LEFT JOIN categories c ON t.category_id = c.id
             LEFT JOIN user_category_overrides o ON c.id = o.category_id AND o.user_id = t.user_id
             UNION ALL
             SELECT ct.id, ct.date, ct.description, ct.amount,
                    'Credit Card' as category, '💳' as icon, 'Expense' as type,
-                   'credit_card' as source, ct.user_id
+                   'credit_card' as source,
+                   1 as paid_by_cc,
+                   ct.user_id
             FROM credit_card_transactions ct
             WHERE ct.txn_type = 'expense'
         ) {where_clause}
@@ -109,7 +117,7 @@ def _cached_filtered_transactions(user_id, year, month, day, txn_type, descripti
     """
     params.append(limit)
     res = db.execute(query, tuple(params))
-    cols = ["ID", "Date", "Description", "Amount", "Category", "Icon", "Type", "Source"]
+    cols = ["ID", "Date", "Description", "Amount", "Category", "Icon", "Type", "Source", "PaidByCC"]
     if res and res.rows:
         return pd.DataFrame(res.rows, columns=cols)
     return pd.DataFrame(columns=cols)
@@ -656,24 +664,30 @@ class FinanceService:
                    (aid, user_id, str(alert_id), month_year, now))
 
     @staticmethod
-    def add_transaction(amount, category_id, description, date_obj, txn_type, user_id, account_id=None):
+    def add_transaction(amount, category_id, description, date_obj, txn_type, user_id, account_id=None, paid_by_cc=False):
         tid = str(uuid.uuid4())
         date_str = date_obj.strftime("%Y-%m-%d %H:%M")
         if not account_id:
             account_id = _cached_default_account(user_id, db.version)
+        cc_flag = 1 if (paid_by_cc and txn_type == "Expense") else 0
         try:
-            adj = amount if txn_type == "Income" else -amount
-            db.batch([
+            stmts = [
                 (
-                    "INSERT INTO transactions (id, user_id, account_id, category_id, amount, type, date, description) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (tid, user_id, account_id, category_id, amount, txn_type, date_str, description),
-                ),
-                (
-                    "UPDATE accounts SET balance = balance + ? WHERE id = ?",
-                    (adj, account_id),
-                ),
-            ])
+                    "INSERT INTO transactions (id, user_id, account_id, category_id, amount, type, date, description, paid_by_cc) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (tid, user_id, account_id, category_id, amount, txn_type, date_str, description, cc_flag),
+                )
+            ]
+            # Only update bank account balance when NOT paid via credit card
+            if cc_flag == 0:
+                adj = amount if txn_type == "Income" else -amount
+                stmts.append(
+                    (
+                        "UPDATE accounts SET balance = balance + ? WHERE id = ?",
+                        (adj, account_id),
+                    )
+                )
+            db.batch(stmts)
             return tid
         except Exception:
             return None
@@ -686,18 +700,18 @@ class FinanceService:
 
     @staticmethod
     def delete_transaction(tid, user_id):
-        res = db.execute("SELECT amount, type, account_id FROM transactions WHERE id = ? AND user_id = ?", (tid, user_id))
+        res = db.execute("SELECT amount, type, account_id, COALESCE(paid_by_cc, 0) FROM transactions WHERE id = ? AND user_id = ?", (tid, user_id))
         if res and res.rows:
-            amount, txn_type, account_id = res.rows[0]
-            adj = -amount if txn_type == "Income" else amount
-            db.batch([
-                ("UPDATE accounts SET balance = balance + ? WHERE id = ?", (adj, account_id)),
-                ("DELETE FROM transactions WHERE id = ? AND user_id = ?", (tid, user_id)),
-            ])
+            amount, txn_type, account_id, paid_by_cc = res.rows[0]
+            stmts = [("DELETE FROM transactions WHERE id = ? AND user_id = ?", (tid, user_id))]
+            if not paid_by_cc:
+                adj = -amount if txn_type == "Income" else amount
+                stmts.insert(0, ("UPDATE accounts SET balance = balance + ? WHERE id = ?", (adj, account_id)))
+            db.batch(stmts)
 
     @staticmethod
-    def get_filtered_transactions(user_id, year=None, month=None, day=None, txn_type=None, description_search=None, category_name=None, limit=100):
-        return _cached_filtered_transactions(user_id, year, month, day, txn_type, description_search, category_name, limit, db.version)
+    def get_filtered_transactions(user_id, year=None, month=None, day=None, txn_type=None, description_search=None, category_name=None, limit=100, cc_filter="All"):
+        return _cached_filtered_transactions(user_id, year, month, day, txn_type, description_search, category_name, limit, db.version, cc_filter)
 
     @staticmethod
     def get_recent_transactions(user_id, limit=50):

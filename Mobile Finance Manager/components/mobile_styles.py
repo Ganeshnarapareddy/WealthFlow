@@ -907,6 +907,8 @@ def apply_mobile_styles():
             align-items: center;
             justify-content: space-between;
             gap: 10px;
+            width: 100%;
+            box-sizing: border-box;
             background-color: var(--m-surface-1);
             border: 1px solid var(--m-border);
             border-radius: var(--m-rad-card);
@@ -916,7 +918,9 @@ def apply_mobile_styles():
             display: flex;
             align-items: center;
             gap: 10px;
+            flex: 1 1 0;
             min-width: 0;
+            overflow: hidden;
         }
         .m-list-icon {
             width: 36px;
@@ -940,6 +944,31 @@ def apply_mobile_styles():
             font-size: 12px;
             color: var(--m-ink-3);
             margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .m-list-right {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .m-cc-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(245, 158, 11, 0.18);
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            color: #FBBF24;
+            font-family: var(--m-font-ui) !important;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            line-height: 1;
+            padding: 3px 7px;
+            border-radius: var(--m-rad-full);
+            white-space: nowrap;
         }
         .m-list-amt {
             font-family: var(--m-font-mono);
@@ -1083,6 +1112,7 @@ def apply_mobile_styles():
         /* Segmented controls & button groups */
         [data-testid="stSegmentedControl"] [role="radiogroup"],
         [data-testid="stButtonGroup"] > div,
+        [data-baseweb="button-group"],
         .stButtonGroup > div {
             background-color: var(--m-surface-1) !important;
             border: 1px solid var(--m-border) !important;
@@ -1096,6 +1126,7 @@ def apply_mobile_styles():
         }
         [data-testid="stSegmentedControl"] button,
         [data-testid="stButtonGroup"] button,
+        [data-baseweb="button-group"] button,
         .stButtonGroup button {
             border-radius: 8px !important;
             border: 1px solid var(--m-border-strong) !important;
@@ -1110,14 +1141,25 @@ def apply_mobile_styles():
             transition: all 0.15s ease !important;
         }
         [data-testid="stSegmentedControl"] button[aria-checked="true"],
+        [data-testid="stSegmentedControl"] button[aria-selected="true"],
+        [data-testid="stSegmentedControl"] button[data-selected="true"],
         [data-testid="stButtonGroup"] button[aria-checked="true"],
         [data-testid="stButtonGroup"] button[aria-pressed="true"],
-        [data-testid="stButtonGroup"] [data-testid*="Active"],
-        [data-testid="stButtonGroup"] button[kind="segmented_controlActive"],
-        button[data-testid="stBaseButton-segmented_controlActive"],
-        button[data-testid="stBaseButton-pillsActive"],
+        [data-testid="stButtonGroup"] button[aria-selected="true"],
+        [data-testid="stButtonGroup"] button[data-selected="true"],
+        [data-testid="stButtonGroup"] button[data-active="true"],
+        [data-testid="stButtonGroup"] button[data-testid*="Active"],
+        [data-testid="stButtonGroup"] button[kind*="Active"],
+        [data-baseweb="button-group"] button[aria-checked="true"],
+        [data-baseweb="button-group"] button[aria-pressed="true"],
+        [data-baseweb="button-group"] button[aria-selected="true"],
+        [data-baseweb="button-group"] button[data-selected="true"],
+        [data-baseweb="button-group"] button[kind*="Active"],
+        [data-baseweb="button-group"] button[data-testid*="Active"],
         .stButtonGroup button[aria-checked="true"],
-        .stButtonGroup [data-testid*="Active"] {
+        .stButtonGroup button[aria-selected="true"],
+        .stButtonGroup button[data-selected="true"],
+        .stButtonGroup button[data-testid*="Active"] {
             background-color: var(--m-accent) !important;
             border-color: var(--m-accent) !important;
             color: var(--m-accent-ink) !important;
@@ -1125,14 +1167,80 @@ def apply_mobile_styles():
             box-shadow: 0 2px 10px var(--m-accent-glow) !important;
         }
         [data-testid="stSegmentedControl"] button[aria-checked="true"] *,
+        [data-testid="stSegmentedControl"] button[aria-selected="true"] *,
+        [data-testid="stSegmentedControl"] button[data-selected="true"] *,
         [data-testid="stButtonGroup"] button[aria-checked="true"] *,
         [data-testid="stButtonGroup"] button[aria-pressed="true"] *,
-        [data-testid="stButtonGroup"] [data-testid*="Active"] *,
-        [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] *,
-        button[data-testid="stBaseButton-segmented_controlActive"] *,
-        button[data-testid="stBaseButton-pillsActive"] *,
+        [data-testid="stButtonGroup"] button[aria-selected="true"] *,
+        [data-testid="stButtonGroup"] button[data-selected="true"] *,
+        [data-testid="stButtonGroup"] button[data-active="true"] *,
+        [data-testid="stButtonGroup"] button[data-testid*="Active"] *,
+        [data-testid="stButtonGroup"] button[kind*="Active"] *,
+        [data-baseweb="button-group"] button[aria-checked="true"] *,
+        [data-baseweb="button-group"] button[aria-pressed="true"] *,
+        [data-baseweb="button-group"] button[aria-selected="true"] *,
+        [data-baseweb="button-group"] button[data-selected="true"] *,
+        [data-baseweb="button-group"] button[kind*="Active"] *,
+        [data-baseweb="button-group"] button[data-testid*="Active"] *,
         .stButtonGroup button[aria-checked="true"] *,
-        .stButtonGroup [data-testid*="Active"] * {
+        .stButtonGroup button[aria-selected="true"] *,
+        .stButtonGroup button[data-selected="true"] *,
+        .stButtonGroup button[data-testid*="Active"] * {
+            color: var(--m-accent-ink) !important;
+        }
+
+        /* Quick Add 3-pill mode switcher (Expense / Income / Trip Expense) — deterministic primary highlight */
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            background-color: var(--m-surface-1) !important;
+            border: 1px solid var(--m-border) !important;
+            border-radius: var(--m-rad-card) !important;
+            padding: 5px !important;
+            gap: 6px !important;
+            margin: 0 0 6px 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) > [data-testid="stColumn"] {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            width: auto !important;
+            padding: 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) > [data-testid="stColumn"]:nth-child(1) { flex: 1 1 0 !important; }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) > [data-testid="stColumn"]:nth-child(2) { flex: 0.9 1 0 !important; }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) > [data-testid="stColumn"]:nth-child(3) { flex: 1.3 1 0 !important; }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) .stElementContainer,
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) .stButton {
+            margin: 0 !important;
+            padding: 0 !important;
+            gap: 0 !important;
+            width: 100% !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) .stButton > button {
+            height: 36px !important;
+            min-height: 36px !important;
+            max-height: 36px !important;
+            padding: 0 10px !important;
+            border-radius: 8px !important;
+            background-color: var(--m-surface-2) !important;
+            border: 1px solid var(--m-border-strong) !important;
+            color: var(--m-ink-2) !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+            white-space: nowrap !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) .stButton > button[kind="primary"] {
+            background-color: var(--m-accent) !important;
+            border-color: var(--m-accent) !important;
+            color: var(--m-accent-ink) !important;
+            font-weight: 600 !important;
+            box-shadow: 0 2px 10px var(--m-accent-glow) !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-m_qa_tab_exp) .stButton > button[kind="primary"] * {
             color: var(--m-accent-ink) !important;
         }
 
@@ -1293,7 +1401,7 @@ def apply_mobile_styles():
         }
         [data-testid="stHorizontalBlock"]:has(.m-alert-row) > [data-testid="stColumn"]:first-child,
         [data-testid="stHorizontalBlock"]:has(.m-list-card) > [data-testid="stColumn"]:first-child {
-            flex: 1 1 auto !important;
+            flex: 1 1 0px !important;
             min-width: 0 !important;
             width: auto !important;
         }

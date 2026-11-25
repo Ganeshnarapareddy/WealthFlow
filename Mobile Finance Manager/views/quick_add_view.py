@@ -18,16 +18,28 @@ def render_quick_add_view(uid: str, finance_service, trip_service):
             st.toast(toast_msg, icon=":material/check_circle:")
             st.success(toast_msg)
 
-        mode = st.segmented_control(
-            "Entry Type",
-            ["Expense", "Income", "Trip Expense"],
-            default=st.session_state["m_qa_mode"],
-            label_visibility="collapsed",
-            key="m_qa_mode_seg",
-        )
-        if mode is not None:
-            st.session_state["m_qa_mode"] = mode
+        # Deterministic 3-pill mode switcher (immune to Streamlit version DOM diffs)
         active_mode = st.session_state["m_qa_mode"]
+        if active_mode not in ("Expense", "Income", "Trip Expense"):
+            active_mode = "Expense"
+            st.session_state["m_qa_mode"] = active_mode
+
+        sc1, sc2, sc3 = st.columns([1.0, 0.9, 1.25])
+        for col, opt, btn_key in (
+            (sc1, "Expense", "m_qa_tab_exp"),
+            (sc2, "Income", "m_qa_tab_inc"),
+            (sc3, "Trip Expense", "m_qa_tab_trip"),
+        ):
+            with col:
+                if st.button(
+                    opt,
+                    key=btn_key,
+                    type="primary" if active_mode == opt else "secondary",
+                    use_container_width=True,
+                ):
+                    st.session_state["m_qa_mode"] = opt
+                    st.rerun(scope="fragment")
+
         v = st.session_state["m_qa_v"]
 
         if active_mode in ("Expense", "Income"):
@@ -52,6 +64,11 @@ def render_quick_add_view(uid: str, finance_service, trip_service):
                 )
                 dt = st.date_input("Date", value=datetime.now().date(), key=f"m_qa_dt_{v}")
                 desc = st.text_input("Description", value="", placeholder="What was this for?", key=f"m_qa_desc_{v}")
+                paid_by_cc = (
+                    st.checkbox("Paid by CC", value=False, key=f"m_qa_cc_{v}")
+                    if active_mode == "Expense"
+                    else False
+                )
 
                 if st.form_submit_button(f"Record {active_mode}", type="primary", use_container_width=True):
                     if amt is None or amt <= 0:
@@ -60,9 +77,18 @@ def render_quick_add_view(uid: str, finance_service, trip_service):
                         st.error("Please select a category.")
                     else:
                         full_dt = datetime.combine(dt, datetime.now().time())
-                        finance_service.add_transaction(amt, cat_opts[cat_sel], desc.strip(), full_dt, active_mode, uid)
+                        finance_service.add_transaction(
+                            amt,
+                            cat_opts[cat_sel],
+                            desc.strip(),
+                            full_dt,
+                            active_mode,
+                            uid,
+                            paid_by_cc=paid_by_cc,
+                        )
                         st.session_state["m_qa_v"] = v + 1
-                        st.session_state["m_qa_toast"] = f"{active_mode} logged: {fmt(amt)} ({cat_sel})"
+                        cc_note = " · CC" if paid_by_cc else ""
+                        st.session_state["m_qa_toast"] = f"{active_mode} logged: {fmt(amt)} ({cat_sel}{cc_note})"
                         st.rerun(scope="fragment")
         else:
             trips_df = trip_service.get_trips(uid)
