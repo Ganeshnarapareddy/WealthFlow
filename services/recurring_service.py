@@ -36,6 +36,56 @@ class RecurringService:
         )
 
     @staticmethod
+    def update_subscription(sub_id, user_id, name, amount, cycle, start_date, next_billing_date=None, icon=None):
+        """Update an existing subscription owned by user_id."""
+        if next_billing_date is None:
+            next_billing_date = RecurringService._next_cycle(start_date, cycle)
+        if icon is not None and str(icon).strip():
+            icon_clean = str(icon).strip()[:8]
+            db.execute(
+                "UPDATE subscriptions SET name = ?, amount = ?, billing_cycle = ?, start_date = ?, next_billing_date = ?, icon = ? "
+                "WHERE id = ? AND user_id = ?",
+                (name.strip(), float(amount), cycle, str(start_date), str(next_billing_date), icon_clean, sub_id, user_id),
+            )
+        else:
+            db.execute(
+                "UPDATE subscriptions SET name = ?, amount = ?, billing_cycle = ?, start_date = ?, next_billing_date = ? "
+                "WHERE id = ? AND user_id = ?",
+                (name.strip(), float(amount), cycle, str(start_date), str(next_billing_date), sub_id, user_id),
+            )
+
+    @staticmethod
+    def renew_subscription(sub_id, user_id):
+        """Advance a subscription by +1 billing cycle past today and record today as last billed date."""
+        res = db.execute(
+            "SELECT billing_cycle, next_billing_date FROM subscriptions WHERE id = ? AND user_id = ?",
+            (sub_id, user_id),
+        )
+        if not res or not res.rows:
+            return None
+        cycle, next_str = res.rows[0]
+        today = datetime.now().date()
+        try:
+            cur_next = datetime.strptime(str(next_str), "%Y-%m-%d").date()
+        except Exception:
+            cur_next = today
+
+        new_next = RecurringService._next_cycle(cur_next, cycle)
+        guard = 0
+        while new_next <= today and guard < 240:
+            stepped = RecurringService._next_cycle(new_next, cycle)
+            if stepped <= new_next:
+                break
+            new_next = stepped
+            guard += 1
+
+        db.execute(
+            "UPDATE subscriptions SET start_date = ?, next_billing_date = ? WHERE id = ? AND user_id = ?",
+            (str(today), str(new_next), sub_id, user_id),
+        )
+        return str(new_next)
+
+    @staticmethod
     def delete_subscription(sub_id, user_id):
         db.execute("DELETE FROM subscriptions WHERE id = ? AND user_id = ?", (sub_id, user_id))
 

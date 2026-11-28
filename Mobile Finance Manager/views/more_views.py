@@ -4,6 +4,7 @@ import streamlit as st
 
 from components.mobile_ui import fmt, m_section, m_empty, m_kpi_strip, m_delete_popover
 from components.mobile_nav import SYM_MAP, CODE_BY_SYM
+from components.upi_bridge import UPI_APPS, UPI_APP_OPTIONS
 
 
 def render_more_hub(user_data: dict):
@@ -80,16 +81,21 @@ def render_subscriptions_mobile(uid: str, recurring_service):
     )
 
     with st.expander("Add subscription", icon=":material/add:"):
+        add_cycle = st.selectbox("Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly", "Custom"], key="m_add_sub_cycle")
         with st.form("m_new_sub", clear_on_submit=True):
             name = st.text_input("Name *", placeholder="e.g. Netflix, Health Insurance")
             amt = st.number_input("Amount *", min_value=0.01, value=None, placeholder="0.00", step=10.0)
-            cycle = st.selectbox("Cycle", ["Monthly", "Quarterly", "6 Months", "Yearly"])
+            custom_months = 3
+            if add_cycle == "Custom":
+                custom_months = st.number_input("Custom Cycle (Months)", min_value=1, max_value=120, value=3, step=1)
+            icon = st.text_input("Emoji / Icon", value="💳", max_chars=4, placeholder="e.g. 📺, 🛡️, 🎵")
             dt = st.date_input("Start / Last Billed Date", value=datetime.now().date())
             if st.form_submit_button("Add Subscription", type="primary", use_container_width=True):
                 if not name.strip() or not amt:
                     st.error("Name and amount are required.")
                 else:
-                    recurring_service.add_subscription(uid, name.strip(), amt, cycle, dt)
+                    final_cycle = f"Custom:{int(custom_months)}" if add_cycle == "Custom" else add_cycle
+                    recurring_service.add_subscription(uid, name.strip(), amt, final_cycle, dt, icon=icon.strip() or "💳")
                     st.session_state["m_toast"] = f"Added {name.strip()}!"
                     st.rerun()
 
@@ -97,20 +103,85 @@ def render_subscriptions_mobile(uid: str, recurring_service):
         m_empty("No subscriptions yet", "Track recurring bills to get renewal alerts on Home.")
         return
 
+    std_cycles = ["Monthly", "Quarterly", "6 Months", "Yearly"]
     for _, row in df.iterrows():
-        cyc_lbl = recurring_service.format_cycle(row["Cycle"])
-        c1, c2 = st.columns([0.84, 0.16], vertical_alignment="center")
-        with c1:
+        sid = str(row["id"])
+        sname = str(row["Name"])
+        samt = float(row["Amount"] or 0.0)
+        raw_cycle = str(row["Cycle"] or "Monthly")
+        sicon = str(row["Icon"] or "🔄")
+        cyc_lbl = recurring_service.format_cycle(raw_cycle)
+
+        c_main, c_edit, c_del = st.columns([0.72, 0.14, 0.14], vertical_alignment="center")
+        with c_main:
             st.markdown(
                 f'<div class="m-list-card">'
-                f'<div class="m-list-left"><div class="m-list-icon">{html.escape(str(row["Icon"] or "🔄"))}</div>'
-                f'<div style="min-width:0;"><div class="m-list-title">{html.escape(str(row["Name"]))}</div>'
+                f'<div class="m-list-left"><div class="m-list-icon">{html.escape(sicon)}</div>'
+                f'<div style="min-width:0;"><div class="m-list-title">{html.escape(sname)}</div>'
                 f'<div class="m-list-sub">{html.escape(cyc_lbl)} · Next {html.escape(str(row["Next Date"]))}</div></div></div>'
-                f'<div class="m-list-amt">{html.escape(fmt(row["Amount"]))}</div></div>',
+                f'<div class="m-list-amt">{html.escape(fmt(samt))}</div></div>',
                 unsafe_allow_html=True,
             )
-        with c2:
-            m_delete_popover(row["id"], f"msub_{row['id']}", recurring_service.delete_subscription, str(row["Name"]), pass_user_id=uid, toast_msg="Subscription deleted.")
+        with c_edit:
+            with st.popover("", icon=":material/edit:", help=f"Edit or renew {sname}"):
+                if st.button("Renew (+1 Cycle)", icon=":material/autorenew:", key=f"m_sub_renew_{sid}", type="secondary", use_container_width=True):
+                    new_next = recurring_service.renew_subscription(sid, uid)
+                    st.session_state["m_toast"] = f"Renewed {sname}! Next: {new_next}" if new_next else f"Renewed {sname}!"
+                    st.rerun()
+
+                is_custom = raw_cycle.startswith("Custom:")
+                cur_custom_m = 3
+                if is_custom:
+                    try:
+                        cur_custom_m = max(1, int(raw_cycle.split(":")[1]))
+                    except (ValueError, IndexError):
+                        cur_custom_m = 3
+                cycle_choices = std_cycles + ["Custom"]
+                cur_cyc_idx = 4 if is_custom else (std_cycles.index(raw_cycle) if raw_cycle in std_cycles else 0)
+
+                try:
+                    cur_start_dt = datetime.strptime(str(row["Start Date"]), "%Y-%m-%d").date()
+                except Exception:
+                    cur_start_dt = datetime.now().date()
+                try:
+                    cur_next_dt = datetime.strptime(str(row["Next Date"]), "%Y-%m-%d").date()
+                except Exception:
+                    cur_next_dt = datetime.now().date()
+
+                with st.form(f"m_edit_sub_form_{sid}"):
+                    ed_name = st.text_input("Name *", value=sname, key=f"m_es_name_{sid}")
+                    ed_amt = st.number_input("Amount *", min_value=0.01, value=max(0.01, samt), step=10.0, key=f"m_es_amt_{sid}")
+                    ed_cycle = st.selectbox("Cycle", cycle_choices, index=cur_cyc_idx, key=f"m_es_cyc_{sid}")
+                    ed_custom_m = st.number_input(
+                        "Custom Months (if Custom)",
+                        min_value=1,
+                        max_value=120,
+                        value=cur_custom_m,
+                        step=1,
+                        key=f"m_es_cm_{sid}",
+                    )
+                    ed_icon = st.text_input("Emoji / Icon", value=sicon, max_chars=4, key=f"m_es_ico_{sid}")
+                    ed_start = st.date_input("Start / Last Billed Date", value=cur_start_dt, key=f"m_es_st_{sid}")
+                    ed_next = st.date_input("Next Renewal Date", value=cur_next_dt, key=f"m_es_nx_{sid}")
+                    if st.form_submit_button("Save Changes", type="primary", use_container_width=True):
+                        if not ed_name.strip() or not ed_amt:
+                            st.error("Name and amount are required.")
+                        else:
+                            final_ed_cycle = f"Custom:{int(ed_custom_m)}" if ed_cycle == "Custom" else ed_cycle
+                            recurring_service.update_subscription(
+                                sid,
+                                uid,
+                                ed_name.strip(),
+                                float(ed_amt),
+                                final_ed_cycle,
+                                ed_start,
+                                next_billing_date=ed_next,
+                                icon=ed_icon.strip() or "💳",
+                            )
+                            st.session_state["m_toast"] = f"Updated '{ed_name.strip()}'!"
+                            st.rerun()
+        with c_del:
+            m_delete_popover(sid, f"msub_{sid}", recurring_service.delete_subscription, sname, pass_user_id=uid, toast_msg="Subscription deleted.")
 
 
 def render_loans_mobile(uid: str, loan_service):
@@ -349,6 +420,38 @@ def render_settings_mobile(uid: str, user_data: dict, finance_service, auth_serv
     if new_unlink != unlink_cc:
         finance_service.set_setting("cc_unlink_transactions", str(new_unlink), uid)
         st.session_state["m_toast"] = f"Credit card transactions {'unlinked' if new_unlink else 'linked'}."
+        st.rerun()
+
+    m_section("Quick Pay & UPI", "Default app launched after logging an expense via Pay")
+    cur_upi = finance_service.get_setting("preferred_upi_app", "None", uid)
+    if cur_upi not in UPI_APP_OPTIONS:
+        cur_upi = "None"
+    sel_upi = st.selectbox(
+        "Default Payment App",
+        UPI_APP_OPTIONS,
+        index=UPI_APP_OPTIONS.index(cur_upi),
+        format_func=lambda k: UPI_APPS[k]["label"],
+        key="m_set_upi_app",
+    )
+    if sel_upi != cur_upi:
+        finance_service.set_setting("preferred_upi_app", sel_upi, uid)
+        st.session_state["m_toast"] = (
+            f"Quick Pay set to {UPI_APPS[sel_upi]['label']}."
+            if sel_upi != "None"
+            else "Quick Pay handoff disabled."
+        )
+        st.rerun()
+
+    def_cc_pay = finance_service.get_setting("preferred_upi_default_cc", "False", uid) == "True"
+    new_def_cc_pay = st.toggle(
+        "Default 'Paid by CC' checked in Quick Add",
+        value=def_cc_pay,
+        key="m_set_upi_def_cc",
+        help="Automatically ticks 'Paid by CC' on Quick Add expenses (helpful if you pay via RuPay Credit Card on UPI).",
+    )
+    if new_def_cc_pay != def_cc_pay:
+        finance_service.set_setting("preferred_upi_default_cc", str(new_def_cc_pay), uid)
+        st.session_state["m_toast"] = f"Default Paid by CC {'enabled' if new_def_cc_pay else 'disabled'}."
         st.rerun()
 
     m_section("Categories")

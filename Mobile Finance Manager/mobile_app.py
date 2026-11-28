@@ -42,6 +42,7 @@ _M_WATCHED_MODULES = (
     "components.mobile_nav",
     "components.mobile_ui",
     "components.auth_cookie",
+    "components.upi_bridge",
     "views.auth_view",
     "views.dashboard_view",
     "views.quick_add_view",

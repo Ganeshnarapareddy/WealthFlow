@@ -1247,7 +1247,8 @@ def apply_mobile_styles():
         /* ============================================================
            7. FORMS, 16px NON-ZOOM INPUTS & 44px TOUCH BUTTONS
         ============================================================ */
-        [data-testid="stForm"] {
+        [data-testid="stForm"],
+        .st-key-m_qa_exp_card {
             background-color: var(--m-surface-1) !important;
             border: 1px solid var(--m-border) !important;
             border-radius: var(--m-rad-hero) !important;
@@ -1405,11 +1406,37 @@ def apply_mobile_styles():
             min-width: 0 !important;
             width: auto !important;
         }
-        [data-testid="stHorizontalBlock"]:has(.m-alert-row) > [data-testid="stColumn"]:last-child,
-        [data-testid="stHorizontalBlock"]:has(.m-list-card) > [data-testid="stColumn"]:last-child {
+        [data-testid="stHorizontalBlock"]:has(.m-alert-row) > [data-testid="stColumn"]:not(:first-child),
+        [data-testid="stHorizontalBlock"]:has(.m-list-card) > [data-testid="stColumn"]:not(:first-child) {
             flex: 0 0 auto !important;
             width: auto !important;
             min-width: 0 !important;
+        }
+        .m-qr-chip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            background: rgba(52, 211, 153, 0.10);
+            border: 1px solid rgba(52, 211, 153, 0.34);
+            border-radius: var(--m-rad-card);
+            padding: 9px 12px;
+        }
+        .m-qr-chip-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--m-success);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .m-qr-chip-vpa {
+            font-size: 11px;
+            color: var(--m-ink-2);
+            font-family: var(--m-font-mono);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* Floating Mobile Toast (clears top bar & Dynamic Island) */
