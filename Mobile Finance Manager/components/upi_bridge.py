@@ -14,7 +14,7 @@ UPI_APPS = {
     "CRED": {
         "label": "CRED",
         "android_pkg": "com.dreamplug.androidapp",
-        "ios_scheme": "cred://upi/pay",
+        "ios_scheme": "credpay://upi/pay",
         "ios_home": "cred://",
     },
     "Paytm": {

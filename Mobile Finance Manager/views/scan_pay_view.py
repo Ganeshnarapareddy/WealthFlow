@@ -62,8 +62,6 @@ def render_scan_pay_view(uid: str, finance_service):
                 note=handoff.get("note", ""),
                 paid_by_cc=handoff.get("paid_by_cc", False),
             )
-            if handoff.get("app") == "CRED":
-                st.caption("Note: CRED on iPhone opens without auto-filling the amount — the amount is copied to your clipboard, or tap Back to pick Paytm / PhonePe / Google Pay.")
 
             ac1, ac2 = st.columns(2)
             with ac1:
