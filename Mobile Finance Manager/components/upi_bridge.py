@@ -178,11 +178,12 @@ def render_qr_scanner_widget(
     auto_open: bool = False,
 ):
     """
-    Cross-platform (iOS Safari PWA + Android Chrome) live QR scanner + native photo fallback.
-    Fixes dense UPI QR detection via:
-    - Multi-CDN jsQR loader (jsDelivr -> cdnjs -> unpkg) + local iframe fallback + native BarcodeDetector
-    - HD rear camera constraints + continuous autofocus
-    - Dual-pass high-res center reticle crop (900px) & full-frame alternating scan
+    Cross-platform (iOS Safari PWA + Android Chrome) QR scanner + photo snap fallback.
+    Combines:
+    - Native BarcodeDetector (Chrome/Android)
+    - ZXing QRCodeReader + HybridBinarizer (handles tilted, glare, uneven-lighting camera frames)
+    - jsQR + contrast-normalized grayscale enhancement
+    - Multi-crop & multi-scale scanning on both live video and snapped camera photos
     """
     key_json = json.dumps(target_input_key)
     lbl_json = json.dumps(button_label)
@@ -195,6 +196,7 @@ def render_qr_scanner_widget(
         <head>
         <meta charset="utf-8" />
         <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" async></script>
+        <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js" async></script>
         <style>
             * {{ box-sizing: border-box; margin: 0; padding: 0; }}
             html, body {{
@@ -249,6 +251,10 @@ def render_qr_scanner_widget(
                 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js',
                 'https://unpkg.com/jsqr@1.4.0/dist/jsQR.min.js'
             ];
+            const ZXING_URLS = [
+                'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
+                'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js'
+            ];
 
             function getHost() {{
                 try {{
@@ -259,39 +265,53 @@ def render_qr_scanner_widget(
                 return {{ win: window, doc: document }};
             }}
 
-            function loadScript(targetDoc, url, id) {{
-                return new Promise((resolve) => {{
+            function loadLib(targetDoc, urls, globalName, idPrefix) {{
+                return new Promise(async (resolve) => {{
                     const targetWin = targetDoc.defaultView || window;
-                    if (typeof targetWin.jsQR === 'function') return resolve(targetWin.jsQR);
-                    const sc = targetDoc.createElement('script');
-                    if (id) sc.id = id;
-                    sc.src = url;
-                    sc.async = true;
-                    const timer = setTimeout(() => resolve(targetWin.jsQR || null), 3500);
-                    sc.onload = () => {{ clearTimeout(timer); resolve(targetWin.jsQR || null); }};
-                    sc.onerror = () => {{ clearTimeout(timer); resolve(null); }};
-                    targetDoc.head.appendChild(sc);
+                    if (targetWin[globalName]) return resolve(targetWin[globalName]);
+                    if (window[globalName]) return resolve(window[globalName]);
+
+                    for (let i = 0; i < urls.length; i++) {{
+                        const res = await new Promise((r) => {{
+                            const sc = targetDoc.createElement('script');
+                            sc.id = idPrefix + '-' + i;
+                            sc.src = urls[i];
+                            sc.async = true;
+                            const t = setTimeout(() => r(targetWin[globalName] || null), 3500);
+                            sc.onload = () => {{ clearTimeout(t); r(targetWin[globalName] || null); }};
+                            sc.onerror = () => {{ clearTimeout(t); r(null); }};
+                            targetDoc.head.appendChild(sc);
+                        }});
+                        if (res) return resolve(res);
+                    }}
+                    resolve(targetWin[globalName] || window[globalName] || null);
                 }});
             }}
 
-            async function getJsQR(hostDoc) {{
+            async function getDecoders(hostDoc) {{
                 const hostWin = hostDoc.defaultView || window.parent || window;
-                if (typeof hostWin.jsQR === 'function') return hostWin.jsQR;
-                if (typeof window.jsQR === 'function') return window.jsQR;
-
-                for (let i = 0; i < JSQR_URLS.length; i++) {{
-                    const fn = await loadScript(hostDoc, JSQR_URLS[i], 'wf-jsqr-host-' + i);
-                    if (typeof fn === 'function') return fn;
-                    const fnLocal = await loadScript(document, JSQR_URLS[i], 'wf-jsqr-local-' + i);
-                    if (typeof fnLocal === 'function') return fnLocal;
-                }}
-                return hostWin.jsQR || window.jsQR || null;
+                const [jsQRfn, ZXingLib] = await Promise.all([
+                    (hostWin.jsQR || window.jsQR)
+                        ? Promise.resolve(hostWin.jsQR || window.jsQR)
+                        : loadLib(hostDoc, JSQR_URLS, 'jsQR', 'wf-jsqr')
+                            .then((fn) => fn || loadLib(document, JSQR_URLS, 'jsQR', 'wf-jsqr-l')),
+                    (hostWin.ZXing || window.ZXing)
+                        ? Promise.resolve(hostWin.ZXing || window.ZXing)
+                        : loadLib(hostDoc, ZXING_URLS, 'ZXing', 'wf-zxing')
+                            .then((lib) => lib || loadLib(document, ZXING_URLS, 'ZXing', 'wf-zxing-l')),
+                ]);
+                let detector = null;
+                try {{
+                    const BD = hostWin.BarcodeDetector || window.BarcodeDetector;
+                    if (BD) detector = new BD({{ formats: ['qr_code'] }});
+                }} catch (e) {{}}
+                return {{ jsQRfn, ZXingLib, detector }};
             }}
 
-            // Warm up decoder right away
+            // Warm up both engines on page load
             try {{
                 const h = getHost();
-                getJsQR(h.doc);
+                getDecoders(h.doc);
             }} catch (e) {{}}
 
             function syncToStreamlitInput(decodedText) {{
@@ -318,6 +338,51 @@ def render_qr_scanner_widget(
                 return true;
             }}
 
+            function buildContrastImageData(imgData) {{
+                const w = imgData.width;
+                const h = imgData.height;
+                const src = imgData.data;
+                const out = new Uint8ClampedArray(src.length);
+                const len = w * h;
+                const luma = new Uint8Array(len);
+                let minV = 255, maxV = 0;
+
+                for (let i = 0, j = 0; i < len; i++, j += 4) {{
+                    const y = (src[j] * 77 + src[j + 1] * 150 + src[j + 2] * 29) >> 8;
+                    luma[i] = y;
+                    if (y < minV) minV = y;
+                    if (y > maxV) maxV = y;
+                }}
+                const span = Math.max(16, maxV - minV);
+                for (let i = 0, j = 0; i < len; i++, j += 4) {{
+                    let v = ((luma[i] - minV) * 255) / span;
+                    if (v < 0) v = 0;
+                    if (v > 255) v = 255;
+                    out[j] = out[j + 1] = out[j + 2] = v;
+                    out[j + 3] = 255;
+                }}
+                return {{ data: out, width: w, height: h }};
+            }}
+
+            function tryZXingCanvas(ZXingLib, zxingReader, zxingHints, imgData) {{
+                if (!ZXingLib || !zxingReader) return null;
+                try {{
+                    const w = imgData.width;
+                    const h = imgData.height;
+                    const d = imgData.data;
+                    const len = w * h;
+                    const luma = new Uint8ClampedArray(len);
+                    for (let i = 0, j = 0; i < len; i++, j += 4) {{
+                        luma[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+                    }}
+                    const src = new ZXingLib.RGBLuminanceSource(luma, w, h);
+                    const bmp = new ZXingLib.BinaryBitmap(new ZXingLib.HybridBinarizer(src));
+                    const res = zxingReader.decode(bmp, zxingHints);
+                    if (res && res.getText) return res.getText();
+                }} catch (e) {{}}
+                return null;
+            }}
+
             function openScannerOverlay() {{
                 const {{ win, doc }} = getHost();
                 const prev = doc.getElementById('wf-qr-overlay');
@@ -335,26 +400,33 @@ def render_qr_scanner_widget(
                 ].join(';');
 
                 overlay.innerHTML = `
-                    <div style="width:100%;max-width:440px;display:flex;align-items:center;justify-content:space-between;">
-                        <div>
+                    <div style="width:100%;max-width:440px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                        <div style="min-width:0;">
                             <div style="font-size:17px;font-weight:700;color:#F3F5F8;">Scan UPI QR</div>
-                            <div id="wf-qr-sub" style="font-size:12px;color:#9CA6B8;margin-top:2px;">Hold steady inside the frame</div>
+                            <div id="wf-qr-sub" style="font-size:12px;color:#9CA6B8;margin-top:2px;">Initializing scanner...</div>
                         </div>
-                        <button id="wf-qr-close" type="button" style="
-                            height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);
-                            background:#182132;color:#F3F5F8;font-size:13px;font-weight:600;cursor:pointer;">
-                            Close
-                        </button>
+                        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                            <button id="wf-qr-torch" type="button" style="display:none;
+                                height:38px;padding:0 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);
+                                background:#182132;color:#FBBF24;font-size:12px;font-weight:600;cursor:pointer;">
+                                Flash
+                            </button>
+                            <button id="wf-qr-close" type="button" style="
+                                height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);
+                                background:#182132;color:#F3F5F8;font-size:13px;font-weight:600;cursor:pointer;">
+                                Close
+                            </button>
+                        </div>
                     </div>
                     <div style="position:relative;width:100%;max-width:360px;aspect-ratio:1/1;border-radius:18px;overflow:hidden;
                                 background:#111724;border:1px solid rgba(255,255,255,0.16);display:flex;align-items:center;justify-content:center;">
                         <video id="wf-qr-video" playsinline webkit-playsinline muted autoplay style="width:100%;height:100%;object-fit:cover;display:none;"></video>
-                        <div style="position:absolute;inset:14%;border:2px solid rgba(79,134,247,0.9);border-radius:14px;pointer-events:none;box-shadow:0 0 0 999px rgba(9,13,22,0.36);"></div>
+                        <div style="position:absolute;inset:12%;border:2px solid rgba(79,134,247,0.9);border-radius:14px;pointer-events:none;box-shadow:0 0 0 999px rgba(9,13,22,0.34);"></div>
                         <div id="wf-qr-status" style="position:relative;z-index:2;padding:16px;text-align:center;font-size:13px;color:#9CA6B8;">
                             Starting camera...
                         </div>
                     </div>
-                    <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;">
+                    <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:8px;">
                         <label style="width:100%;height:46px;border-radius:12px;background:#182132;border:1px solid rgba(255,255,255,0.16);
                                       color:#F3F5F8;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
                             <span>Snap Photo / Upload QR Image</span>
@@ -367,6 +439,7 @@ def render_qr_scanner_widget(
                 let stream = null;
                 let rafId = null;
                 let closed = false;
+                let torchOn = false;
                 const canvas = doc.createElement('canvas');
                 const ctx = canvas.getContext('2d', {{ willReadFrequently: true }});
                 const videoEl = overlay.querySelector('#wf-qr-video');
@@ -374,6 +447,7 @@ def render_qr_scanner_widget(
                 videoEl.playsInline = true;
                 const statusEl = overlay.querySelector('#wf-qr-status');
                 const subEl = overlay.querySelector('#wf-qr-sub');
+                const torchBtn = overlay.querySelector('#wf-qr-torch');
                 const fileInput = overlay.querySelector('#wf-qr-file');
 
                 function cleanup() {{
@@ -394,61 +468,107 @@ def render_qr_scanner_widget(
                     syncToStreamlitInput(rawText);
                 }}
 
-                async function decodeCurrentCanvas(jsQRfn, barcodeDetector) {{
-                    if (barcodeDetector) {{
+                async function decodeCanvasAllEngines(decoders, zxingReader, zxingHints, useContrast) {{
+                    const {{ jsQRfn, ZXingLib, detector }} = decoders;
+                    if (detector) {{
                         try {{
-                            const codes = await barcodeDetector.detect(canvas);
+                            const codes = await detector.detect(canvas);
                             if (codes && codes.length && codes[0].rawValue) {{
                                 return codes[0].rawValue;
                             }}
                         }} catch (e) {{}}
                     }}
-                    if (typeof jsQRfn === 'function' && canvas.width > 0 && canvas.height > 0) {{
+                    if (canvas.width <= 0 || canvas.height <= 0) return null;
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                    const zx = tryZXingCanvas(ZXingLib, zxingReader, zxingHints, imgData);
+                    if (zx) return zx;
+
+                    if (typeof jsQRfn === 'function') {{
                         try {{
-                            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                             const code = jsQRfn(imgData.data, imgData.width, imgData.height, {{ inversionAttempts: 'attemptBoth' }});
                             if (code && code.data) return code.data;
                         }} catch (e) {{}}
+
+                        if (useContrast) {{
+                            try {{
+                                const norm = buildContrastImageData(imgData);
+                                const code2 = jsQRfn(norm.data, norm.width, norm.height, {{ inversionAttempts: 'attemptBoth' }});
+                                if (code2 && code2.data) return code2.data;
+                            }} catch (e) {{}}
+                        }}
                     }}
                     return null;
                 }}
 
-                function makeBarcodeDetector() {{
+                function makeZXingInstance(ZXingLib) {{
+                    if (!ZXingLib || !ZXingLib.QRCodeReader) return {{ reader: null, hints: null }};
                     try {{
-                        const BD = win.BarcodeDetector || window.BarcodeDetector;
-                        if (BD) return new BD({{ formats: ['qr_code'] }});
-                    }} catch (e) {{}}
-                    return null;
+                        const reader = new ZXingLib.QRCodeReader();
+                        const hints = new Map();
+                        if (ZXingLib.DecodeHintType && ZXingLib.DecodeHintType.TRY_HARDER) {{
+                            hints.set(ZXingLib.DecodeHintType.TRY_HARDER, true);
+                        }}
+                        return {{ reader, hints }};
+                    }} catch (e) {{
+                        return {{ reader: null, hints: null }};
+                    }}
                 }}
 
+                // Snap Photo / Upload QR Image (runs multi-crop + contrast + ZXing + jsQR)
                 fileInput.addEventListener('change', async (ev) => {{
                     const file = ev.target.files && ev.target.files[0];
                     if (!file) return;
                     statusEl.style.display = 'block';
-                    statusEl.textContent = 'Reading QR from photo...';
-                    const jsQRfn = await getJsQR(doc);
-                    const detector = makeBarcodeDetector();
-                    if (!jsQRfn && !detector) {{
-                        statusEl.textContent = 'QR decoder unavailable offline. Please check internet connection or type UPI ID manually.';
-                        return;
-                    }}
+                    statusEl.textContent = 'Analyzing QR in photo...';
+                    const decoders = await getDecoders(doc);
+                    const {{ reader: zxingReader, hints: zxingHints }} = makeZXingInstance(decoders.ZXingLib);
+
                     const img = new Image();
                     const url = URL.createObjectURL(file);
                     img.onload = async () => {{
-                        for (const maxDim of [1200, 800]) {{
-                            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-                            canvas.width = Math.max(1, Math.round(img.width * scale));
-                            canvas.height = Math.max(1, Math.round(img.height * scale));
-                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                            const res = await decodeCurrentCanvas(jsQRfn, detector);
+                        const iw = img.naturalWidth || img.width;
+                        const ih = img.naturalHeight || img.height;
+                        const minDim = Math.min(iw, ih);
+
+                        const attempts = [
+                            // Full image at two scales
+                            {{ sx: 0, sy: 0, sw: iw, sh: ih, maxOut: 1400 }},
+                            {{ sx: 0, sy: 0, sw: iw, sh: ih, maxOut: 800 }},
+                            // Center 72% square crop (matches camera aim)
+                            {{
+                                sx: Math.round((iw - minDim * 0.72) / 2),
+                                sy: Math.round((ih - minDim * 0.72) / 2),
+                                sw: Math.round(minDim * 0.72),
+                                sh: Math.round(minDim * 0.72),
+                                maxOut: 1000
+                            }},
+                            // Tighter center 48% crop (for distant/small QR in 12MP snap)
+                            {{
+                                sx: Math.round((iw - minDim * 0.48) / 2),
+                                sy: Math.round((ih - minDim * 0.48) / 2),
+                                sw: Math.round(minDim * 0.48),
+                                sh: Math.round(minDim * 0.48),
+                                maxOut: 900
+                            }},
+                        ];
+
+                        for (const a of attempts) {{
+                            if (a.sw <= 0 || a.sh <= 0) continue;
+                            const scale = Math.min(1, a.maxOut / Math.max(a.sw, a.sh));
+                            canvas.width = Math.max(1, Math.round(a.sw * scale));
+                            canvas.height = Math.max(1, Math.round(a.sh * scale));
+                            ctx.drawImage(img, a.sx, a.sy, a.sw, a.sh, 0, 0, canvas.width, canvas.height);
+                            const res = await decodeCanvasAllEngines(decoders, zxingReader, zxingHints, true);
                             if (res) {{
                                 URL.revokeObjectURL(url);
                                 handleDecoded(res);
                                 return;
                             }}
                         }}
+
                         URL.revokeObjectURL(url);
-                        statusEl.textContent = 'No QR code detected in that photo. Move closer or try again.';
+                        statusEl.textContent = 'No QR code detected in that photo. Hold QR steady inside the blue square or enter UPI ID manually.';
                     }};
                     img.onerror = () => {{
                         URL.revokeObjectURL(url);
@@ -457,33 +577,51 @@ def render_qr_scanner_widget(
                     img.src = url;
                 }});
 
+                // Live camera stream
                 (async () => {{
-                    const jsQRPromise = getJsQR(doc);
-                    const detector = makeBarcodeDetector();
+                    const decodersPromise = getDecoders(doc);
                     if (!win.navigator || !win.navigator.mediaDevices || !win.navigator.mediaDevices.getUserMedia) {{
                         statusEl.textContent = 'Live camera unavailable here. Tap "Snap Photo / Upload QR Image" below.';
                         return;
                     }}
                     try {{
-                        stream = await win.navigator.mediaDevices.getUserMedia({{
-                            video: {{
-                                facingMode: {{ ideal: 'environment' }},
-                                width: {{ ideal: 1920 }},
-                                height: {{ ideal: 1080 }}
-                            }},
-                            audio: false
-                        }});
+                        try {{
+                            stream = await win.navigator.mediaDevices.getUserMedia({{
+                                video: {{
+                                    facingMode: {{ ideal: 'environment' }},
+                                    width: {{ ideal: 1920 }},
+                                    height: {{ ideal: 1080 }}
+                                }},
+                                audio: false
+                            }});
+                        }} catch (e1) {{
+                            stream = await win.navigator.mediaDevices.getUserMedia({{
+                                video: {{ facingMode: 'environment' }},
+                                audio: false
+                            }});
+                        }}
                         if (closed) {{
                             stream.getTracks().forEach(t => t.stop());
                             return;
                         }}
 
-                        // Hint continuous autofocus if supported on rear camera
+                        const track = stream.getVideoTracks()[0];
                         try {{
-                            const track = stream.getVideoTracks()[0];
                             const caps = track && track.getCapabilities ? track.getCapabilities() : null;
-                            if (caps && caps.focusMode && caps.focusMode.includes('continuous')) {{
-                                await track.applyConstraints({{ advanced: [{{ focusMode: 'continuous' }}] }});
+                            if (caps) {{
+                                if (caps.focusMode && caps.focusMode.includes('continuous')) {{
+                                    await track.applyConstraints({{ advanced: [{{ focusMode: 'continuous' }}] }});
+                                }}
+                                if (caps.torch) {{
+                                    torchBtn.style.display = 'inline-block';
+                                    torchBtn.addEventListener('click', async () => {{
+                                        torchOn = !torchOn;
+                                        try {{
+                                            await track.applyConstraints({{ advanced: [{{ torch: torchOn }}] }});
+                                            torchBtn.textContent = torchOn ? 'Flash On' : 'Flash';
+                                        }} catch (e) {{}}
+                                    }});
+                                }}
                             }}
                         }} catch (e) {{}}
 
@@ -492,12 +630,18 @@ def render_qr_scanner_widget(
                         videoEl.style.display = 'block';
                         statusEl.style.display = 'none';
 
-                        const jsQRfn = await jsQRPromise;
-                        if (!jsQRfn && !detector) {{
-                            subEl.textContent = 'QR library could not load — use Snap Photo below or check internet';
+                        const decoders = await decodersPromise;
+                        const {{ reader: zxingReader, hints: zxingHints }} = makeZXingInstance(decoders.ZXingLib);
+
+                        const engines = [];
+                        if (decoders.detector) engines.push('Native');
+                        if (zxingReader) engines.push('ZXing');
+                        if (decoders.jsQRfn) engines.push('jsQR');
+                        if (!engines.length) {{
+                            subEl.textContent = 'QR engine blocked offline — type UPI ID manually';
                             return;
                         }}
-                        subEl.textContent = 'Scanning active · Align QR inside blue square';
+                        subEl.textContent = 'Scanning (' + engines.join(' + ') + ') · Align QR inside box';
 
                         let lastScan = 0;
                         let frameCount = 0;
@@ -509,22 +653,35 @@ def render_qr_scanner_widget(
                                 const vw = videoEl.videoWidth;
                                 const vh = videoEl.videoHeight;
                                 if (vw > 0 && vh > 0) {{
-                                    // Alternate high-res center reticle crop (75% min dim) and full-frame scan
-                                    if (frameCount % 2 === 1) {{
-                                        const cropSize = Math.round(Math.min(vw, vh) * 0.78);
+                                    const mode = frameCount % 3;
+                                    if (mode === 0) {{
+                                        // Center 76% crop at high resolution
+                                        const cropSize = Math.round(Math.min(vw, vh) * 0.76);
                                         const sx = Math.round((vw - cropSize) / 2);
                                         const sy = Math.round((vh - cropSize) / 2);
-                                        const outSize = Math.min(900, cropSize);
-                                        canvas.width = outSize;
-                                        canvas.height = outSize;
-                                        ctx.drawImage(videoEl, sx, sy, cropSize, cropSize, 0, 0, outSize, outSize);
+                                        const out = Math.min(960, cropSize);
+                                        canvas.width = out;
+                                        canvas.height = out;
+                                        ctx.drawImage(videoEl, sx, sy, cropSize, cropSize, 0, 0, out, out);
+                                    }} else if (mode === 1) {{
+                                        // Tighter center 52% crop for small/dense merchant QRs
+                                        const cropSize = Math.round(Math.min(vw, vh) * 0.52);
+                                        const sx = Math.round((vw - cropSize) / 2);
+                                        const sy = Math.round((vh - cropSize) / 2);
+                                        const out = Math.min(840, cropSize);
+                                        canvas.width = out;
+                                        canvas.height = out;
+                                        ctx.drawImage(videoEl, sx, sy, cropSize, cropSize, 0, 0, out, out);
                                     }} else {{
-                                        const scale = Math.min(1, 960 / Math.max(vw, vh));
+                                        // Full frame
+                                        const scale = Math.min(1, 1024 / Math.max(vw, vh));
                                         canvas.width = Math.round(vw * scale);
                                         canvas.height = Math.round(vh * scale);
                                         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
                                     }}
-                                    const res = await decodeCurrentCanvas(jsQRfn, detector);
+                                    const res = await decodeCanvasAllEngines(
+                                        decoders, zxingReader, zxingHints, (frameCount % 2 === 0)
+                                    );
                                     if (res) {{
                                         handleDecoded(res);
                                         return;
