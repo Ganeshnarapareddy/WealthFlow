@@ -42,6 +42,8 @@ def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service,
         with c_back:
             back_target = st.session_state.get("m_scan_return_page", "Home") if cur_page == "ScanPay" else "More"
             if st.button("", icon=":material/arrow_back:", key="m_top_back", help=f"Back to {back_target}"):
+                if cur_page == "ScanPay":
+                    st.session_state.pop("m_sp_handoff", None)
                 st.session_state["m_page"] = back_target
                 st.rerun()
         with c_title:
@@ -139,6 +141,7 @@ def render_qr_fab():
     if st.session_state.get("m_page") == "ScanPay":
         return
     if st.button("", icon=":material/qr_code_scanner:", key="m_qr_fab_btn", type="primary", help="Scan QR & Pay"):
+        st.session_state.pop("m_sp_handoff", None)
         st.session_state["m_scan_return_page"] = st.session_state.get("m_page", "Home")
         st.session_state["m_scan_auto_open"] = True
         st.session_state["m_page"] = "ScanPay"

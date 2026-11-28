@@ -27,7 +27,7 @@ def render_scan_pay_view(uid: str, finance_service):
         v = st.session_state["m_sp_v"]
         auto_open = bool(st.session_state.pop("m_scan_auto_open", False))
 
-        handoff = st.session_state.pop("m_sp_handoff", None)
+        handoff = st.session_state.get("m_sp_handoff")
         if handoff:
             st.success(f"Expense logged: {fmt(handoff['amount'])}")
             render_pay_handoff_banner(
@@ -40,10 +40,12 @@ def render_scan_pay_view(uid: str, finance_service):
             ac1, ac2 = st.columns(2)
             with ac1:
                 if st.button("Scan Another QR", type="primary", use_container_width=True, key="m_sp_again"):
+                    st.session_state.pop("m_sp_handoff", None)
                     st.session_state["m_scan_auto_open"] = True
                     st.rerun(scope="fragment")
             with ac2:
-                if st.button("Back to Home", type="secondary", use_container_width=True, key="m_sp_home"):
+                if st.button("Done · Back Home", type="secondary", use_container_width=True, key="m_sp_home"):
+                    st.session_state.pop("m_sp_handoff", None)
                     st.session_state["m_page"] = st.session_state.get("m_scan_return_page", "Home")
                     st.rerun()
             return
@@ -75,14 +77,12 @@ def render_scan_pay_view(uid: str, finance_service):
         pn_txt = parsed_qr.get("pn") or "Merchant"
         pa_txt = parsed_qr["pa"]
 
-        # Pre-fill Amount & Description from QR once if empty
+        # Pre-fill Amount from QR once if empty; keep Description blank unless user types one
         if parsed_qr.get("am") and st.session_state.get(f"m_sp_amt_{v}") is None:
             try:
                 st.session_state[f"m_sp_amt_{v}"] = float(parsed_qr["am"])
             except (TypeError, ValueError):
                 pass
-        if not st.session_state.get(f"m_sp_desc_{v}") and parsed_qr.get("pn"):
-            st.session_state[f"m_sp_desc_{v}"] = parsed_qr["pn"]
 
         m_section("Payment Details", "Step 2 · Enter amount & details, then tap Proceed")
 
@@ -129,7 +129,7 @@ def render_scan_pay_view(uid: str, finance_service):
             )
             desc = st.text_input(
                 "Description",
-                placeholder="What was this for?",
+                placeholder=f"Optional (default: {pn_txt})",
                 key=f"m_sp_desc_{v}",
             )
             paid_by_cc = st.checkbox("Paid by CC", value=default_cc, key=f"m_sp_cc_{v}")

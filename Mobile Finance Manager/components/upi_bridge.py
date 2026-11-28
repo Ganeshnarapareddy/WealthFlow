@@ -53,9 +53,97 @@ UPI_APP_OPTIONS = list(UPI_APPS.keys())
 PAY_ACTIVE_APP_OPTIONS = [k for k in UPI_APP_OPTIONS if k != "None"]
 
 
+def _parse_tlvs(payload: str) -> list[tuple[str, str]]:
+    """Parse EMVCo Tag-Length-Value (2-char tag, 2-digit length, value) records."""
+    items = []
+    idx = 0
+    n = len(payload)
+    while idx + 4 <= n:
+        tag = payload[idx : idx + 2]
+        len_str = payload[idx + 2 : idx + 4]
+        if not len_str.isdigit():
+            break
+        val_len = int(len_str)
+        val_start = idx + 4
+        val_end = val_start + val_len
+        if val_end > n:
+            break
+        items.append((tag, payload[val_start:val_end]))
+        idx = val_end
+    return items
+
+
+def _parse_emvco_upi_qr(text: str) -> dict | None:
+    """Decode BharatQR / EMVCo merchant QR payloads (e.g., SBI/Hitachi '000201...')."""
+    tlvs = _parse_tlvs(text)
+    if not tlvs:
+        return None
+    top_map = {t: v for t, v in tlvs}
+    if top_map.get("00") != "01":
+        return None
+
+    pa = ""
+    pn = top_map.get("59", "").strip()
+    mc = top_map.get("52", "").strip()
+    tr = ""
+    tn = ""
+    am_val = None
+
+    raw_am = top_map.get("54", "").strip()
+    if raw_am:
+        try:
+            f = float(raw_am)
+            if f > 0:
+                am_val = f
+        except ValueError:
+            am_val = None
+
+    # Tags 26..51 hold Merchant Account Info templates; NPCI UPI uses RID A000000524
+    for t, val in tlvs:
+        if t.isdigit() and 26 <= int(t) <= 51:
+            sub = {st_tag: st_val for st_tag, st_val in _parse_tlvs(val)}
+            guid = sub.get("00", "").upper()
+            cand_pa = sub.get("01", "").strip()
+            if (guid == "A000000524" or "@" in cand_pa) and "@" in cand_pa and " " not in cand_pa:
+                pa = cand_pa
+                break
+
+    # Fallback: scan any template subtag 01..99 for a VPA if RID differed
+    if not pa:
+        for t, val in tlvs:
+            if t.isdigit() and 26 <= int(t) <= 51:
+                for _, st_val in _parse_tlvs(val):
+                    s = st_val.strip()
+                    if "@" in s and " " not in s and not s.lower().startswith("http"):
+                        pa = s
+                        break
+            if pa:
+                break
+
+    if not pa:
+        return None
+
+    if "62" in top_map:
+        add_map = {st_tag: st_val for st_tag, st_val in _parse_tlvs(top_map["62"])}
+        tr = (add_map.get("05") or add_map.get("01") or add_map.get("07") or "").strip()
+        tn = (add_map.get("08") or "").strip()
+
+    return {
+        "pa": pa,
+        "pn": pn,
+        "am": am_val,
+        "tn": tn,
+        "mc": mc,
+        "tr": tr,
+        "orgid": "",
+        "mode": "",
+    }
+
+
 def parse_upi_qr(raw_value: str) -> dict | None:
     """
-    Parse an NPCI UPI QR URI (upi://pay?pa=...&pn=...) or bare UPI ID (name@bank).
+    Parse an NPCI UPI QR URI (upi://pay?pa=...&pn=...), BharatQR/EMVCo TLV ('000201...'),
+    or bare UPI ID (name@bank).
     Returns normalized dict with pa, pn, am, tn, mc, tr, orgid, mode, or None if invalid.
     """
     if not raw_value or not isinstance(raw_value, str):
@@ -65,7 +153,7 @@ def parse_upi_qr(raw_value: str) -> dict | None:
         return None
 
     # Allow bare VPA entry like "shop@okaxis"
-    if "://" not in text and "@" in text and " " not in text and "?" not in text:
+    if "://" not in text and "@" in text and " " not in text and "?" not in text and not text.startswith("000201"):
         return {
             "pa": text,
             "pn": "",
@@ -77,8 +165,14 @@ def parse_upi_qr(raw_value: str) -> dict | None:
             "mode": "",
         }
 
+    # BharatQR / EMVCo TLV format (starts with payload format 000201)
+    if text.startswith("000201"):
+        emv = _parse_emvco_upi_qr(text)
+        if emv:
+            return emv
+
     low = text.lower()
-    if not (low.startswith("upi://") or low.startswith("upiglobal://")):
+    if not (low.startswith("upi://") or low.startswith("upiglobal://") or "pa=" in low):
         return None
 
     parsed = urlparse(text)
