@@ -221,10 +221,6 @@ if not st.session_state.get("_handled_launch_action"):
         st.session_state["m_scan_return_page"] = "Home"
         st.session_state["m_scan_auto_open"] = True
         st.session_state["m_page"] = "ScanPay"
-        try:
-            st.query_params.pop("action", None)
-        except Exception:
-            pass
 
 if "m_page" not in st.session_state:
     st.session_state["m_page"] = "Home"

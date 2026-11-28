@@ -456,16 +456,19 @@ def render_settings_mobile(uid: str, user_data: dict, finance_service, auth_serv
 
     with st.expander("iPhone Home Screen Scan Widget / Shortcut", icon=":material/qr_code_scanner:"):
         scan_url = "https://wealthflow-mobile-ganeshnarapareddy.streamlit.app/?action=scan"
-        st.caption("Use this link to launch directly into the QR Scanner (skipping Home):")
+        webapp_url = "webapp://wealthflow-mobile-ganeshnarapareddy.streamlit.app/?action=scan"
+        safari_url = "x-safari-https://wealthflow-mobile-ganeshnarapareddy.streamlit.app/?action=scan"
+        st.caption("Direct Scan URL (Safari / PWA):")
         st.code(scan_url, language=None)
         st.markdown(
-            "**Option A — iPhone Home Screen Widget (via Apple Shortcuts):**\n"
-            "1. Open Apple **Shortcuts** app → tap **+** → **Add Action** → search **Open URLs**.\n"
-            "2. Paste the URL above and name the shortcut **Scan & Pay**.\n"
-            "3. Long-press your iPhone Home Screen → **+** → add the **Shortcuts** widget (or tap Share → **Add to Home Screen**).\n\n"
-            "**Option B — Dedicated Home Screen Icon:**\n"
-            "Open the URL above in Safari, then tap **Share → Add to Home Screen**."
+            "**1. Standalone PWA Icon (Recommended — Bypasses Firefox):**\n"
+            "Open the URL above in **Safari** → tap **Share → Add to Home Screen** (name it *Scan & Pay*).\n\n"
+            "**2. Shortcuts Widget opening the PWA (even with Firefox as default):**\n"
+            "After adding the *Scan & Pay* PWA above, in Apple **Shortcuts**: add a **Text** action with:\n"
+            f"`{webapp_url}`\n"
+            "followed by **Open URL** (or use `x-safari-https://...` to force Safari instead of Firefox):"
         )
+        st.code(safari_url, language=None)
 
     m_section("Categories")
     cat_view = st.segmented_control(
