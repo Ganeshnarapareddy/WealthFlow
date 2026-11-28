@@ -50,6 +50,7 @@ UPI_APPS = {
 }
 
 UPI_APP_OPTIONS = list(UPI_APPS.keys())
+PAY_ACTIVE_APP_OPTIONS = [k for k in UPI_APP_OPTIONS if k != "None"]
 
 
 def parse_upi_qr(raw_value: str) -> dict | None:
@@ -171,14 +172,21 @@ def build_upi_urls(app_name: str, parsed_qr: dict | None, amount: float, note: s
     }
 
 
-def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Merchant QR"):
+def render_qr_scanner_widget(
+    target_input_key: str,
+    button_label: str = "Press to Scan QR",
+    auto_open: bool = False,
+):
     """
-    Renders a cross-platform (iOS Safari PWA + Android Chrome) QR scanner launcher.
-    Mounts a full-screen camera overlay inside window.parent.document (live camera + photo fallback)
-    and syncs decoded UPI URI back to Streamlit's keyed text_input via React's native value setter.
+    Cross-platform (iOS Safari PWA + Android Chrome) live QR scanner + native photo fallback.
+    Fixes dense UPI QR detection via:
+    - Multi-CDN jsQR loader (jsDelivr -> cdnjs -> unpkg) + local iframe fallback + native BarcodeDetector
+    - HD rear camera constraints + continuous autofocus
+    - Dual-pass high-res center reticle crop (900px) & full-frame alternating scan
     """
     key_json = json.dumps(target_input_key)
     lbl_json = json.dumps(button_label)
+    auto_json = json.dumps(bool(auto_open))
 
     components.html(
         f"""
@@ -186,6 +194,7 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
         <html>
         <head>
         <meta charset="utf-8" />
+        <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" async></script>
         <style>
             * {{ box-sizing: border-box; margin: 0; padding: 0; }}
             html, body {{
@@ -195,30 +204,31 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
             }}
             .wf-scan-btn {{
                 width: 100%;
-                height: 44px;
-                border-radius: 12px;
-                border: 1px solid rgba(79, 134, 247, 0.45);
-                background: rgba(79, 134, 247, 0.14);
-                color: #93C5FD;
-                font-size: 14px;
+                height: 52px;
+                border-radius: 14px;
+                border: 1px solid rgba(79, 134, 247, 0.55);
+                background: linear-gradient(135deg, #4F86F7 0%, #3B74EB 100%);
+                color: #FFFFFF;
+                font-size: 15px;
                 font-weight: 600;
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 8px;
+                gap: 10px;
+                box-shadow: 0 4px 16px rgba(79, 134, 247, 0.35);
                 -webkit-tap-highlight-color: transparent;
-                transition: background 140ms ease, transform 90ms ease;
+                transition: transform 90ms ease, opacity 140ms ease;
             }}
             .wf-scan-btn:active {{
                 transform: scale(0.98);
-                background: rgba(79, 134, 247, 0.24);
+                opacity: 0.92;
             }}
         </style>
         </head>
         <body>
         <button id="wfScanTrigger" type="button" class="wf-scan-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>
                 <path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
                 <rect x="7" y="7" width="4" height="4" rx="0.5"/><rect x="13" y="7" width="4" height="4" rx="0.5"/>
@@ -231,7 +241,14 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
         (function() {{
             const TARGET_KEY = {key_json};
             const BTN_LABEL = {lbl_json};
+            const AUTO_OPEN = {auto_json};
             document.getElementById('wfScanBtnLabel').textContent = BTN_LABEL;
+
+            const JSQR_URLS = [
+                'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js',
+                'https://unpkg.com/jsqr@1.4.0/dist/jsQR.min.js'
+            ];
 
             function getHost() {{
                 try {{
@@ -242,30 +259,39 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                 return {{ win: window, doc: document }};
             }}
 
-            function ensureJsQR(hostDoc) {{
+            function loadScript(targetDoc, url, id) {{
                 return new Promise((resolve) => {{
-                    const hostWin = hostDoc.defaultView || window.parent || window;
-                    if (typeof hostWin.jsQR === 'function') return resolve(hostWin.jsQR);
-                    let existing = hostDoc.getElementById('wf-jsqr-lib');
-                    if (existing) {{
-                        existing.addEventListener('load', () => resolve(hostWin.jsQR || null));
-                        setTimeout(() => resolve(hostWin.jsQR || null), 2500);
-                        return;
-                    }}
-                    const sc = hostDoc.createElement('script');
-                    sc.id = 'wf-jsqr-lib';
-                    sc.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+                    const targetWin = targetDoc.defaultView || window;
+                    if (typeof targetWin.jsQR === 'function') return resolve(targetWin.jsQR);
+                    const sc = targetDoc.createElement('script');
+                    if (id) sc.id = id;
+                    sc.src = url;
                     sc.async = true;
-                    sc.onload = () => resolve(hostWin.jsQR || null);
-                    sc.onerror = () => resolve(null);
-                    hostDoc.head.appendChild(sc);
+                    const timer = setTimeout(() => resolve(targetWin.jsQR || null), 3500);
+                    sc.onload = () => {{ clearTimeout(timer); resolve(targetWin.jsQR || null); }};
+                    sc.onerror = () => {{ clearTimeout(timer); resolve(null); }};
+                    targetDoc.head.appendChild(sc);
                 }});
             }}
 
-            // Preload decoder in background so modal opens instantly
+            async function getJsQR(hostDoc) {{
+                const hostWin = hostDoc.defaultView || window.parent || window;
+                if (typeof hostWin.jsQR === 'function') return hostWin.jsQR;
+                if (typeof window.jsQR === 'function') return window.jsQR;
+
+                for (let i = 0; i < JSQR_URLS.length; i++) {{
+                    const fn = await loadScript(hostDoc, JSQR_URLS[i], 'wf-jsqr-host-' + i);
+                    if (typeof fn === 'function') return fn;
+                    const fnLocal = await loadScript(document, JSQR_URLS[i], 'wf-jsqr-local-' + i);
+                    if (typeof fnLocal === 'function') return fnLocal;
+                }}
+                return hostWin.jsQR || window.jsQR || null;
+            }}
+
+            // Warm up decoder right away
             try {{
                 const h = getHost();
-                ensureJsQR(h.doc);
+                getJsQR(h.doc);
             }} catch (e) {{}}
 
             function syncToStreamlitInput(decodedText) {{
@@ -288,7 +314,7 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                 }}));
                 setTimeout(() => {{
                     try {{ inp.blur(); }} catch (e) {{}}
-                }}, 60);
+                }}, 80);
                 return true;
             }}
 
@@ -301,7 +327,7 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                 overlay.id = 'wf-qr-overlay';
                 overlay.style.cssText = [
                     'position:fixed', 'inset:0', 'z-index:999999',
-                    'background:rgba(9,13,22,0.97)',
+                    'background:rgba(9,13,22,0.98)',
                     'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:space-between',
                     'padding:calc(18px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px)) 16px',
                     'font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif',
@@ -312,7 +338,7 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                     <div style="width:100%;max-width:440px;display:flex;align-items:center;justify-content:space-between;">
                         <div>
                             <div style="font-size:17px;font-weight:700;color:#F3F5F8;">Scan UPI QR</div>
-                            <div style="font-size:12px;color:#9CA6B8;margin-top:2px;">Point camera at merchant QR code</div>
+                            <div id="wf-qr-sub" style="font-size:12px;color:#9CA6B8;margin-top:2px;">Hold steady inside the frame</div>
                         </div>
                         <button id="wf-qr-close" type="button" style="
                             height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);
@@ -322,14 +348,14 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                     </div>
                     <div style="position:relative;width:100%;max-width:360px;aspect-ratio:1/1;border-radius:18px;overflow:hidden;
                                 background:#111724;border:1px solid rgba(255,255,255,0.16);display:flex;align-items:center;justify-content:center;">
-                        <video id="wf-qr-video" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover;display:none;"></video>
-                        <div id="wf-qr-reticle" style="position:absolute;inset:14%;border:2px solid rgba(79,134,247,0.85);border-radius:14px;pointer-events:none;box-shadow:0 0 0 999px rgba(9,13,22,0.38);"></div>
+                        <video id="wf-qr-video" playsinline webkit-playsinline muted autoplay style="width:100%;height:100%;object-fit:cover;display:none;"></video>
+                        <div style="position:absolute;inset:14%;border:2px solid rgba(79,134,247,0.9);border-radius:14px;pointer-events:none;box-shadow:0 0 0 999px rgba(9,13,22,0.36);"></div>
                         <div id="wf-qr-status" style="position:relative;z-index:2;padding:16px;text-align:center;font-size:13px;color:#9CA6B8;">
                             Starting camera...
                         </div>
                     </div>
                     <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;">
-                        <label style="width:100%;height:44px;border-radius:12px;background:#182132;border:1px solid rgba(255,255,255,0.16);
+                        <label style="width:100%;height:46px;border-radius:12px;background:#182132;border:1px solid rgba(255,255,255,0.16);
                                       color:#F3F5F8;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
                             <span>Snap Photo / Upload QR Image</span>
                             <input id="wf-qr-file" type="file" accept="image/*" capture="environment" style="display:none;" />
@@ -344,7 +370,10 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                 const canvas = doc.createElement('canvas');
                 const ctx = canvas.getContext('2d', {{ willReadFrequently: true }});
                 const videoEl = overlay.querySelector('#wf-qr-video');
+                videoEl.muted = true;
+                videoEl.playsInline = true;
                 const statusEl = overlay.querySelector('#wf-qr-status');
+                const subEl = overlay.querySelector('#wf-qr-sub');
                 const fileInput = overlay.querySelector('#wf-qr-file');
 
                 function cleanup() {{
@@ -365,7 +394,7 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                     syncToStreamlitInput(rawText);
                 }}
 
-                async function decodeCanvas(jsQRfn, barcodeDetector) {{
+                async function decodeCurrentCanvas(jsQRfn, barcodeDetector) {{
                     if (barcodeDetector) {{
                         try {{
                             const codes = await barcodeDetector.detect(canvas);
@@ -374,37 +403,52 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                             }}
                         }} catch (e) {{}}
                     }}
-                    if (jsQRfn && canvas.width > 0 && canvas.height > 0) {{
-                        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQRfn(imgData.data, imgData.width, imgData.height, {{ inversionAttempts: 'attemptBoth' }});
-                        if (code && code.data) return code.data;
+                    if (typeof jsQRfn === 'function' && canvas.width > 0 && canvas.height > 0) {{
+                        try {{
+                            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const code = jsQRfn(imgData.data, imgData.width, imgData.height, {{ inversionAttempts: 'attemptBoth' }});
+                            if (code && code.data) return code.data;
+                        }} catch (e) {{}}
                     }}
                     return null;
                 }}
 
-                // Photo / Gallery QR fallback (works even if getUserMedia is restricted)
+                function makeBarcodeDetector() {{
+                    try {{
+                        const BD = win.BarcodeDetector || window.BarcodeDetector;
+                        if (BD) return new BD({{ formats: ['qr_code'] }});
+                    }} catch (e) {{}}
+                    return null;
+                }}
+
                 fileInput.addEventListener('change', async (ev) => {{
                     const file = ev.target.files && ev.target.files[0];
                     if (!file) return;
                     statusEl.style.display = 'block';
                     statusEl.textContent = 'Reading QR from photo...';
-                    const jsQRfn = await ensureJsQR(doc);
-                    const detector = ('BarcodeDetector' in win) ? new win.BarcodeDetector({{ formats: ['qr_code'] }}) : null;
+                    const jsQRfn = await getJsQR(doc);
+                    const detector = makeBarcodeDetector();
+                    if (!jsQRfn && !detector) {{
+                        statusEl.textContent = 'QR decoder unavailable offline. Please check internet connection or type UPI ID manually.';
+                        return;
+                    }}
                     const img = new Image();
                     const url = URL.createObjectURL(file);
                     img.onload = async () => {{
-                        const maxDim = 1024;
-                        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-                        canvas.width = Math.max(1, Math.round(img.width * scale));
-                        canvas.height = Math.max(1, Math.round(img.height * scale));
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        URL.revokeObjectURL(url);
-                        const res = await decodeCanvas(jsQRfn, detector);
-                        if (res) {{
-                            handleDecoded(res);
-                        }} else {{
-                            statusEl.textContent = 'No QR code detected in that photo. Try another shot or enter UPI ID manually.';
+                        for (const maxDim of [1200, 800]) {{
+                            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                            canvas.width = Math.max(1, Math.round(img.width * scale));
+                            canvas.height = Math.max(1, Math.round(img.height * scale));
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            const res = await decodeCurrentCanvas(jsQRfn, detector);
+                            if (res) {{
+                                URL.revokeObjectURL(url);
+                                handleDecoded(res);
+                                return;
+                            }}
                         }}
+                        URL.revokeObjectURL(url);
+                        statusEl.textContent = 'No QR code detected in that photo. Move closer or try again.';
                     }};
                     img.onerror = () => {{
                         URL.revokeObjectURL(url);
@@ -413,42 +457,74 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                     img.src = url;
                 }});
 
-                // Live camera stream
                 (async () => {{
-                    const jsQRfn = await ensureJsQR(doc);
-                    const detector = ('BarcodeDetector' in win) ? new win.BarcodeDetector({{ formats: ['qr_code'] }}) : null;
+                    const jsQRPromise = getJsQR(doc);
+                    const detector = makeBarcodeDetector();
                     if (!win.navigator || !win.navigator.mediaDevices || !win.navigator.mediaDevices.getUserMedia) {{
                         statusEl.textContent = 'Live camera unavailable here. Tap "Snap Photo / Upload QR Image" below.';
                         return;
                     }}
                     try {{
                         stream = await win.navigator.mediaDevices.getUserMedia({{
-                            video: {{ facingMode: {{ ideal: 'environment' }} }},
+                            video: {{
+                                facingMode: {{ ideal: 'environment' }},
+                                width: {{ ideal: 1920 }},
+                                height: {{ ideal: 1080 }}
+                            }},
                             audio: false
                         }});
                         if (closed) {{
                             stream.getTracks().forEach(t => t.stop());
                             return;
                         }}
+
+                        // Hint continuous autofocus if supported on rear camera
+                        try {{
+                            const track = stream.getVideoTracks()[0];
+                            const caps = track && track.getCapabilities ? track.getCapabilities() : null;
+                            if (caps && caps.focusMode && caps.focusMode.includes('continuous')) {{
+                                await track.applyConstraints({{ advanced: [{{ focusMode: 'continuous' }}] }});
+                            }}
+                        }} catch (e) {{}}
+
                         videoEl.srcObject = stream;
                         await videoEl.play();
                         videoEl.style.display = 'block';
                         statusEl.style.display = 'none';
 
+                        const jsQRfn = await jsQRPromise;
+                        if (!jsQRfn && !detector) {{
+                            subEl.textContent = 'QR library could not load — use Snap Photo below or check internet';
+                            return;
+                        }}
+                        subEl.textContent = 'Scanning active · Align QR inside blue square';
+
                         let lastScan = 0;
+                        let frameCount = 0;
                         async function tick(ts) {{
                             if (closed) return;
-                            if (ts - lastScan > 140 && videoEl.readyState >= 2) {{
+                            if (ts - lastScan > 110 && videoEl.readyState >= 2) {{
                                 lastScan = ts;
+                                frameCount++;
                                 const vw = videoEl.videoWidth;
                                 const vh = videoEl.videoHeight;
                                 if (vw > 0 && vh > 0) {{
-                                    const maxW = 640;
-                                    const scale = Math.min(1, maxW / vw);
-                                    canvas.width = Math.round(vw * scale);
-                                    canvas.height = Math.round(vh * scale);
-                                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-                                    const res = await decodeCanvas(jsQRfn, detector);
+                                    // Alternate high-res center reticle crop (75% min dim) and full-frame scan
+                                    if (frameCount % 2 === 1) {{
+                                        const cropSize = Math.round(Math.min(vw, vh) * 0.78);
+                                        const sx = Math.round((vw - cropSize) / 2);
+                                        const sy = Math.round((vh - cropSize) / 2);
+                                        const outSize = Math.min(900, cropSize);
+                                        canvas.width = outSize;
+                                        canvas.height = outSize;
+                                        ctx.drawImage(videoEl, sx, sy, cropSize, cropSize, 0, 0, outSize, outSize);
+                                    }} else {{
+                                        const scale = Math.min(1, 960 / Math.max(vw, vh));
+                                        canvas.width = Math.round(vw * scale);
+                                        canvas.height = Math.round(vh * scale);
+                                        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                                    }}
+                                    const res = await decodeCurrentCanvas(jsQRfn, detector);
                                     if (res) {{
                                         handleDecoded(res);
                                         return;
@@ -459,18 +535,21 @@ def render_qr_scanner_widget(target_input_key: str, button_label: str = "Scan Me
                         }}
                         rafId = win.requestAnimationFrame(tick);
                     }} catch (err) {{
-                        statusEl.textContent = 'Camera permission denied or unavailable. Use "Snap Photo / Upload QR Image" below.';
+                        statusEl.textContent = 'Camera permission blocked or unavailable. Use "Snap Photo / Upload QR Image" below.';
                     }}
                 }})();
             }}
 
             document.getElementById('wfScanTrigger').addEventListener('click', openScannerOverlay);
+            if (AUTO_OPEN) {{
+                setTimeout(openScannerOverlay, 120);
+            }}
         }})();
         </script>
         </body>
         </html>
         """,
-        height=48,
+        height=58,
     )
 
 
@@ -617,7 +696,6 @@ def render_pay_handoff_banner(app_name: str, amount: float, parsed_qr: dict | No
                 copyAmt();
             }});
 
-            // On Android, browsers allow direct intent launch; iOS uses the explicit tap link above
             if (isAndroid) {{
                 setTimeout(function() {{
                     try {{

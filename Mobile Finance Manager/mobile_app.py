@@ -46,6 +46,7 @@ _M_WATCHED_MODULES = (
     "views.auth_view",
     "views.dashboard_view",
     "views.quick_add_view",
+    "views.scan_pay_view",
     "views.ledger_view",
     "views.tripflow_view",
     "views.more_views",
@@ -106,10 +107,11 @@ from services.trip_service import TripService
 # Mobile-only UI components & views
 from components.mobile_pwa import mount_ios_pwa_bridge
 from components.mobile_styles import apply_mobile_styles
-from components.mobile_nav import render_mobile_topbar, render_mobile_dock
+from components.mobile_nav import render_mobile_topbar, render_mobile_dock, render_qr_fab
 from views.auth_view import render_auth_view
 from views.dashboard_view import render_dashboard_view
 from views.quick_add_view import render_quick_add_view
+from views.scan_pay_view import render_scan_pay_view
 from views.ledger_view import render_ledger_view
 from views.tripflow_view import render_tripflow_view
 from views.more_views import (
@@ -225,6 +227,8 @@ elif page == "Ledger":
     render_ledger_view(uid, FinanceService, CreditCardService)
 elif page == "QuickAdd":
     render_quick_add_view(uid, FinanceService, TripService)
+elif page == "ScanPay":
+    render_scan_pay_view(uid, FinanceService)
 elif page == "Trips":
     render_tripflow_view(uid, user_data, TripService, db)
 elif page == "More":
@@ -251,4 +255,5 @@ else:
 
 # Fixed 5-Slot iOS Bottom Tab Dock & iOS Safari PWA Meta Bridge (at end so top bar is flush top-left)
 render_mobile_dock()
+render_qr_fab()
 mount_ios_pwa_bridge(LOGO_B64)

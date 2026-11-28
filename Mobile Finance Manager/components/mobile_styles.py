@@ -1248,11 +1248,76 @@ def apply_mobile_styles():
            7. FORMS, 16px NON-ZOOM INPUTS & 44px TOUCH BUTTONS
         ============================================================ */
         [data-testid="stForm"],
-        .st-key-m_qa_exp_card {
+        .st-key-m_qa_exp_card,
+        .st-key-m_sp_card {
             background-color: var(--m-surface-1) !important;
             border: 1px solid var(--m-border) !important;
             border-radius: var(--m-rad-hero) !important;
             padding: 14px !important;
+        }
+
+        /* Floating Round QR Scanner FAB (Right-Side Overlay above Dock) */
+        [data-testid="stElementContainer"]:has(.st-key-m_qr_fab_btn) {
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+        .st-key-m_qr_fab_btn {
+            position: fixed !important;
+            right: max(16px, calc(50vw - 214px)) !important;
+            bottom: calc(82px + env(safe-area-inset-bottom, 0px)) !important;
+            z-index: 98 !important;
+            width: 52px !important;
+            height: 52px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .st-key-m_qr_fab_btn button {
+            width: 52px !important;
+            min-width: 52px !important;
+            max-width: 52px !important;
+            height: 52px !important;
+            min-height: 52px !important;
+            max-height: 52px !important;
+            border-radius: 50% !important;
+            background: linear-gradient(135deg, #4F86F7 0%, #3B74EB 100%) !important;
+            border: 2px solid var(--m-bg) !important;
+            color: var(--m-accent-ink) !important;
+            box-shadow: 0 8px 24px rgba(79, 134, 247, 0.45), 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        .st-key-m_qr_fab_btn button > div,
+        .st-key-m_qr_fab_btn button > div > span,
+        .st-key-m_qr_fab_btn button span {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .st-key-m_qr_fab_btn button [data-testid="stIconMaterial"] {
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+            color: var(--m-accent-ink) !important;
+            font-size: 24px !important;
+            width: 24px !important;
+            height: 24px !important;
+            line-height: 24px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        .st-key-m_qr_fab_btn button * {
+            color: var(--m-accent-ink) !important;
         }
 
         input, select, textarea,

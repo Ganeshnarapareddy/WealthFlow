@@ -20,6 +20,7 @@ PAGE_TITLES = {
     "QuickAdd": "Quick Add",
     "Trips": "TripFlow",
     "More": "More",
+    "ScanPay": "Scan & Pay",
     **MORE_SUBPAGES,
 }
 
@@ -31,7 +32,7 @@ CODE_BY_SYM = {"₹": "INR", "$": "USD", "€": "EUR", "£": "GBP"}
 def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service, auth_service, cookies):
     """Flush top-left sticky mobile header: WealthFlow | interactive Currency dropdown | square Profile menu."""
     cur_page = st.session_state.get("m_page", "Home")
-    is_subpage = cur_page in MORE_SUBPAGES
+    is_subpage = cur_page in MORE_SUBPAGES or cur_page == "ScanPay"
     title_txt = html.escape(PAGE_TITLES.get(cur_page, cur_page))
     username = html.escape(str(user_data.get("username", "User")))
     sid = html.escape(str(user_data.get("short_id") or "—"))
@@ -39,8 +40,9 @@ def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service,
     if is_subpage:
         c_back, c_title, c_cur, c_prof = st.columns([0.13, 0.45, 0.27, 0.15], vertical_alignment="center")
         with c_back:
-            if st.button("", icon=":material/arrow_back:", key="m_top_back", help="Back to More"):
-                st.session_state["m_page"] = "More"
+            back_target = st.session_state.get("m_scan_return_page", "Home") if cur_page == "ScanPay" else "More"
+            if st.button("", icon=":material/arrow_back:", key="m_top_back", help=f"Back to {back_target}"):
+                st.session_state["m_page"] = back_target
                 st.rerun()
         with c_title:
             st.markdown(f'<div class="wf-m-top-brand"><div class="wf-m-top-title">{title_txt}</div></div>', unsafe_allow_html=True)
@@ -130,3 +132,14 @@ def render_mobile_dock():
         if st.button("More", icon=":material/grid_view:", key="m_dock_more", type="primary" if active_dock == "More" else "secondary", use_container_width=True):
             st.session_state["m_page"] = "More"
             st.rerun()
+
+
+def render_qr_fab():
+    """Floating circular QR Scanner FAB pinned on the right side above the bottom dock."""
+    if st.session_state.get("m_page") == "ScanPay":
+        return
+    if st.button("", icon=":material/qr_code_scanner:", key="m_qr_fab_btn", type="primary", help="Scan QR & Pay"):
+        st.session_state["m_scan_return_page"] = st.session_state.get("m_page", "Home")
+        st.session_state["m_scan_auto_open"] = True
+        st.session_state["m_page"] = "ScanPay"
+        st.rerun()
