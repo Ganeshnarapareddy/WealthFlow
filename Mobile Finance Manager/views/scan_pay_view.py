@@ -27,6 +27,7 @@ def render_scan_pay_view(uid: str, finance_service):
         v = st.session_state["m_sp_v"]
         auto_open = bool(st.session_state.pop("m_scan_auto_open", False))
 
+        # Step 3: Post-Proceed Payment Handoff (persisted in non-widget session_state)
         handoff = st.session_state.get("m_sp_handoff")
         if handoff:
             st.success(f"Expense logged: {fmt(handoff['amount'])}")
@@ -41,20 +42,32 @@ def render_scan_pay_view(uid: str, finance_service):
             with ac1:
                 if st.button("Scan Another QR", type="primary", use_container_width=True, key="m_sp_again"):
                     st.session_state.pop("m_sp_handoff", None)
+                    st.session_state.pop("m_sp_parsed_qr", None)
                     st.session_state["m_scan_auto_open"] = True
                     st.rerun(scope="fragment")
             with ac2:
                 if st.button("Done · Back Home", type="secondary", use_container_width=True, key="m_sp_home"):
                     st.session_state.pop("m_sp_handoff", None)
+                    st.session_state.pop("m_sp_parsed_qr", None)
                     st.session_state["m_page"] = st.session_state.get("m_scan_return_page", "Home")
                     st.rerun()
             return
 
-        # Read any already-scanned QR value BEFORE instantiating widgets
-        raw_qr = st.session_state.get(f"m_sp_upi_{v}", "")
-        parsed_qr = parse_upi_qr(raw_qr)
+        # Step 1: Capture QR and persist into non-widget session_state['m_sp_parsed_qr']
+        # (Widget keys are garbage-collected by Streamlit once unmounted on Step 2.)
+        parsed_qr = st.session_state.get("m_sp_parsed_qr")
+        if not parsed_qr:
+            raw_qr = st.session_state.get(f"m_sp_upi_{v}", "")
+            candidate_qr = parse_upi_qr(raw_qr)
+            if candidate_qr:
+                st.session_state["m_sp_parsed_qr"] = candidate_qr
+                if candidate_qr.get("am") and st.session_state.get(f"m_sp_amt_{v}") is None:
+                    try:
+                        st.session_state[f"m_sp_amt_{v}"] = float(candidate_qr["am"])
+                    except (TypeError, ValueError):
+                        pass
+                parsed_qr = candidate_qr
 
-        # Step 1: Ask for QR first
         if not parsed_qr:
             m_section("Scan & Pay", "Step 1 · Scan merchant UPI QR to begin")
             with st.container(key="m_sp_card"):
@@ -69,20 +82,23 @@ def render_scan_pay_view(uid: str, finance_service):
                     placeholder="e.g. merchant@okaxis or paste upi://pay?...",
                     key=f"m_sp_upi_{v}",
                 )
-                if upi_manual.strip() and not parse_upi_qr(upi_manual):
-                    st.warning("Could not read a valid UPI ID from that input. Expected a UPI QR or name@bank.")
+                if upi_manual.strip():
+                    cand2 = parse_upi_qr(upi_manual)
+                    if cand2:
+                        st.session_state["m_sp_parsed_qr"] = cand2
+                        if cand2.get("am") and st.session_state.get(f"m_sp_amt_{v}") is None:
+                            try:
+                                st.session_state[f"m_sp_amt_{v}"] = float(cand2["am"])
+                            except (TypeError, ValueError):
+                                pass
+                        st.rerun(scope="fragment")
+                    else:
+                        st.warning("Could not read a valid UPI ID from that input. Expected a UPI QR or name@bank.")
             return
 
         # Step 2: QR Captured -> Ask for Amount, Category, Description, Paid by CC, UPI App -> Proceed
         pn_txt = parsed_qr.get("pn") or "Merchant"
         pa_txt = parsed_qr["pa"]
-
-        # Pre-fill Amount from QR once if empty; keep Description blank unless user types one
-        if parsed_qr.get("am") and st.session_state.get(f"m_sp_amt_{v}") is None:
-            try:
-                st.session_state[f"m_sp_amt_{v}"] = float(parsed_qr["am"])
-            except (TypeError, ValueError):
-                pass
 
         m_section("Payment Details", "Step 2 · Enter amount & details, then tap Proceed")
 
@@ -99,6 +115,7 @@ def render_scan_pay_view(uid: str, finance_service):
             )
         with c_chg:
             if st.button("Change QR", key=f"m_sp_reset_qr_{v}", use_container_width=True):
+                st.session_state.pop("m_sp_parsed_qr", None)
                 st.session_state["m_sp_v"] = v + 1
                 st.session_state["m_scan_auto_open"] = True
                 st.rerun(scope="fragment")
@@ -157,6 +174,7 @@ def render_scan_pay_view(uid: str, finance_service):
                         uid,
                         paid_by_cc=paid_by_cc,
                     )
+                    st.session_state.pop("m_sp_parsed_qr", None)
                     st.session_state["m_sp_v"] = v + 1
                     st.session_state["m_sp_handoff"] = {
                         "app": pay_app,
