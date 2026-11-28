@@ -207,6 +207,25 @@ if "sym" not in st.session_state:
     saved_sym = FinanceService.get_setting("currency_symbol", "₹", uid)
     st.session_state["sym"] = saved_sym if saved_sym in ("₹", "$", "€", "£") else "₹"
 
+# Deep-link shortcut: ?action=scan jumps straight into Scan & Pay on launch
+if not st.session_state.get("_handled_launch_action"):
+    st.session_state["_handled_launch_action"] = True
+    try:
+        launch_act = st.query_params.get("action")
+    except Exception:
+        launch_act = None
+    if launch_act == "scan":
+        st.session_state.pop("m_sp_handoff", None)
+        st.session_state.pop("m_sp_parsed_qr", None)
+        st.session_state.pop("m_sp_draft", None)
+        st.session_state["m_scan_return_page"] = "Home"
+        st.session_state["m_scan_auto_open"] = True
+        st.session_state["m_page"] = "ScanPay"
+        try:
+            st.query_params.pop("action", None)
+        except Exception:
+            pass
+
 if "m_page" not in st.session_state:
     st.session_state["m_page"] = "Home"
 

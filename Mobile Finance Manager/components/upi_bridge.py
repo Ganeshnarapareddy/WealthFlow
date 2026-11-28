@@ -98,7 +98,6 @@ def _parse_emvco_upi_qr(text: str) -> dict | None:
         except ValueError:
             am_val = None
 
-    # Tags 26..51 hold Merchant Account Info templates; NPCI UPI uses RID A000000524
     for t, val in tlvs:
         if t.isdigit() and 26 <= int(t) <= 51:
             sub = {st_tag: st_val for st_tag, st_val in _parse_tlvs(val)}
@@ -108,7 +107,6 @@ def _parse_emvco_upi_qr(text: str) -> dict | None:
                 pa = cand_pa
                 break
 
-    # Fallback: scan any template subtag 01..99 for a VPA if RID differed
     if not pa:
         for t, val in tlvs:
             if t.isdigit() and 26 <= int(t) <= 51:
@@ -152,7 +150,6 @@ def parse_upi_qr(raw_value: str) -> dict | None:
     if not text:
         return None
 
-    # Allow bare VPA entry like "shop@okaxis"
     if "://" not in text and "@" in text and " " not in text and "?" not in text and not text.startswith("000201"):
         return {
             "pa": text,
@@ -165,7 +162,6 @@ def parse_upi_qr(raw_value: str) -> dict | None:
             "mode": "",
         }
 
-    # BharatQR / EMVCo TLV format (starts with payload format 000201)
     if text.startswith("000201"):
         emv = _parse_emvco_upi_qr(text)
         if emv:
@@ -272,12 +268,10 @@ def render_qr_scanner_widget(
     auto_open: bool = False,
 ):
     """
-    Cross-platform (iOS Safari PWA + Android Chrome) QR scanner + photo snap fallback.
-    Combines:
-    - Native BarcodeDetector (Chrome/Android)
-    - ZXing QRCodeReader + HybridBinarizer (handles tilted, glare, uneven-lighting camera frames)
-    - jsQR + contrast-normalized grayscale enhancement
-    - Multi-crop & multi-scale scanning on both live video and snapped camera photos
+    Cross-platform (iOS Safari PWA + Android Chrome) QR scanner with clean icon controls:
+    - Flash icon button & X close icon button in header (no engine debug text)
+    - Separate Snap Photo (camera icon) and Upload QR (gallery icon) buttons below viewfinder
+    - Dual-engine ZXing (HybridBinarizer + invert) + jsQR + BarcodeDetector
     """
     key_json = json.dumps(target_input_key)
     lbl_json = json.dumps(button_label)
@@ -402,7 +396,6 @@ def render_qr_scanner_widget(
                 return {{ jsQRfn, ZXingLib, detector }};
             }}
 
-            // Warm up both engines on page load
             try {{
                 const h = getHost();
                 getDecoders(h.doc);
@@ -532,21 +525,26 @@ def render_qr_scanner_widget(
                 ].join(';');
 
                 overlay.innerHTML = `
-                    <div style="width:100%;max-width:440px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <div style="width:100%;max-width:440px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
                         <div style="min-width:0;">
-                            <div style="font-size:17px;font-weight:700;color:#F3F5F8;">Scan UPI QR</div>
-                            <div id="wf-qr-sub" style="font-size:12px;color:#9CA6B8;margin-top:2px;">Initializing scanner...</div>
+                            <div style="font-size:18px;font-weight:700;color:#F3F5F8;">Scan UPI QR</div>
+                            <div id="wf-qr-err" style="display:none;font-size:12px;color:#F87171;margin-top:2px;"></div>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                            <button id="wf-qr-torch" type="button" style="display:none;
-                                height:38px;padding:0 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);
-                                background:#182132;color:#FBBF24;font-size:12px;font-weight:600;cursor:pointer;">
-                                Flash
+                            <button id="wf-qr-torch" type="button" aria-label="Toggle Flash" style="display:none;
+                                width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,0.16);
+                                background:#182132;color:#9CA6B8;align-items:center;justify-content:center;cursor:pointer;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                </svg>
                             </button>
-                            <button id="wf-qr-close" type="button" style="
-                                height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);
-                                background:#182132;color:#F3F5F8;font-size:13px;font-weight:600;cursor:pointer;">
-                                Close
+                            <button id="wf-qr-close" type="button" aria-label="Close" style="
+                                width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,0.16);
+                                background:#182132;color:#F3F5F8;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
                             </button>
                         </div>
                     </div>
@@ -558,11 +556,25 @@ def render_qr_scanner_widget(
                             Starting camera...
                         </div>
                     </div>
-                    <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:8px;">
-                        <label style="width:100%;height:46px;border-radius:12px;background:#182132;border:1px solid rgba(255,255,255,0.16);
+                    <div style="width:100%;max-width:360px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <label style="height:46px;border-radius:12px;background:#182132;border:1px solid rgba(255,255,255,0.16);
                                       color:#F3F5F8;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
-                            <span>Snap Photo / Upload QR Image</span>
-                            <input id="wf-qr-file" type="file" accept="image/*" capture="environment" style="display:none;" />
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            <span>Snap Photo</span>
+                            <input id="wf-qr-snap" type="file" accept="image/*" capture="environment" style="display:none;" />
+                        </label>
+                        <label style="height:46px;border-radius:12px;background:#182132;border:1px solid rgba(255,255,255,0.16);
+                                      color:#F3F5F8;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                            <span>Upload QR</span>
+                            <input id="wf-qr-gallery" type="file" accept="image/*" style="display:none;" />
                         </label>
                     </div>
                 `;
@@ -578,9 +590,10 @@ def render_qr_scanner_widget(
                 videoEl.muted = true;
                 videoEl.playsInline = true;
                 const statusEl = overlay.querySelector('#wf-qr-status');
-                const subEl = overlay.querySelector('#wf-qr-sub');
+                const errEl = overlay.querySelector('#wf-qr-err');
                 const torchBtn = overlay.querySelector('#wf-qr-torch');
-                const fileInput = overlay.querySelector('#wf-qr-file');
+                const snapInput = overlay.querySelector('#wf-qr-snap');
+                const galleryInput = overlay.querySelector('#wf-qr-gallery');
 
                 function cleanup() {{
                     closed = true;
@@ -649,12 +662,10 @@ def render_qr_scanner_widget(
                     }}
                 }}
 
-                // Snap Photo / Upload QR Image (runs multi-crop + contrast + ZXing + jsQR)
-                fileInput.addEventListener('change', async (ev) => {{
-                    const file = ev.target.files && ev.target.files[0];
+                async function analyzeImageFile(file) {{
                     if (!file) return;
                     statusEl.style.display = 'block';
-                    statusEl.textContent = 'Analyzing QR in photo...';
+                    statusEl.textContent = 'Reading QR...';
                     const decoders = await getDecoders(doc);
                     const {{ reader: zxingReader, hints: zxingHints }} = makeZXingInstance(decoders.ZXingLib);
 
@@ -666,10 +677,8 @@ def render_qr_scanner_widget(
                         const minDim = Math.min(iw, ih);
 
                         const attempts = [
-                            // Full image at two scales
                             {{ sx: 0, sy: 0, sw: iw, sh: ih, maxOut: 1400 }},
                             {{ sx: 0, sy: 0, sw: iw, sh: ih, maxOut: 800 }},
-                            // Center 72% square crop (matches camera aim)
                             {{
                                 sx: Math.round((iw - minDim * 0.72) / 2),
                                 sy: Math.round((ih - minDim * 0.72) / 2),
@@ -677,7 +686,6 @@ def render_qr_scanner_widget(
                                 sh: Math.round(minDim * 0.72),
                                 maxOut: 1000
                             }},
-                            // Tighter center 48% crop (for distant/small QR in 12MP snap)
                             {{
                                 sx: Math.round((iw - minDim * 0.48) / 2),
                                 sy: Math.round((ih - minDim * 0.48) / 2),
@@ -702,20 +710,22 @@ def render_qr_scanner_widget(
                         }}
 
                         URL.revokeObjectURL(url);
-                        statusEl.textContent = 'No QR code detected in that photo. Hold QR steady inside the blue square or enter UPI ID manually.';
+                        statusEl.textContent = 'No QR code detected. Try again or enter UPI ID manually.';
                     }};
                     img.onerror = () => {{
                         URL.revokeObjectURL(url);
                         statusEl.textContent = 'Could not load image.';
                     }};
                     img.src = url;
-                }});
+                }}
 
-                // Live camera stream
+                snapInput.addEventListener('change', (ev) => analyzeImageFile(ev.target.files && ev.target.files[0]));
+                galleryInput.addEventListener('change', (ev) => analyzeImageFile(ev.target.files && ev.target.files[0]));
+
                 (async () => {{
                     const decodersPromise = getDecoders(doc);
                     if (!win.navigator || !win.navigator.mediaDevices || !win.navigator.mediaDevices.getUserMedia) {{
-                        statusEl.textContent = 'Live camera unavailable here. Tap "Snap Photo / Upload QR Image" below.';
+                        statusEl.textContent = 'Live camera unavailable. Use Snap Photo or Upload QR below.';
                         return;
                     }}
                     try {{
@@ -747,12 +757,14 @@ def render_qr_scanner_widget(
                                     await track.applyConstraints({{ advanced: [{{ focusMode: 'continuous' }}] }});
                                 }}
                                 if (caps.torch) {{
-                                    torchBtn.style.display = 'inline-block';
+                                    torchBtn.style.display = 'flex';
                                     torchBtn.addEventListener('click', async () => {{
                                         torchOn = !torchOn;
                                         try {{
                                             await track.applyConstraints({{ advanced: [{{ torch: torchOn }}] }});
-                                            torchBtn.textContent = torchOn ? 'Flash On' : 'Flash';
+                                            torchBtn.style.color = torchOn ? '#FBBF24' : '#9CA6B8';
+                                            torchBtn.style.borderColor = torchOn ? 'rgba(251, 191, 36, 0.55)' : 'rgba(255,255,255,0.16)';
+                                            torchBtn.style.background = torchOn ? 'rgba(251, 191, 36, 0.16)' : '#182132';
                                         }} catch (e) {{}}
                                     }});
                                 }}
@@ -767,15 +779,11 @@ def render_qr_scanner_widget(
                         const decoders = await decodersPromise;
                         const {{ reader: zxingReader, hints: zxingHints }} = makeZXingInstance(decoders.ZXingLib);
 
-                        const engines = [];
-                        if (decoders.detector) engines.push('Native');
-                        if (zxingReader) engines.push('ZXing');
-                        if (decoders.jsQRfn) engines.push('jsQR');
-                        if (!engines.length) {{
-                            subEl.textContent = 'QR engine blocked offline — type UPI ID manually';
+                        if (!decoders.detector && !zxingReader && !decoders.jsQRfn) {{
+                            errEl.textContent = 'QR engine blocked offline — enter UPI ID manually';
+                            errEl.style.display = 'block';
                             return;
                         }}
-                        subEl.textContent = 'Scanning (' + engines.join(' + ') + ') · Align QR inside box';
 
                         let lastScan = 0;
                         let frameCount = 0;
@@ -789,7 +797,6 @@ def render_qr_scanner_widget(
                                 if (vw > 0 && vh > 0) {{
                                     const mode = frameCount % 3;
                                     if (mode === 0) {{
-                                        // Center 76% crop at high resolution
                                         const cropSize = Math.round(Math.min(vw, vh) * 0.76);
                                         const sx = Math.round((vw - cropSize) / 2);
                                         const sy = Math.round((vh - cropSize) / 2);
@@ -798,7 +805,6 @@ def render_qr_scanner_widget(
                                         canvas.height = out;
                                         ctx.drawImage(videoEl, sx, sy, cropSize, cropSize, 0, 0, out, out);
                                     }} else if (mode === 1) {{
-                                        // Tighter center 52% crop for small/dense merchant QRs
                                         const cropSize = Math.round(Math.min(vw, vh) * 0.52);
                                         const sx = Math.round((vw - cropSize) / 2);
                                         const sy = Math.round((vh - cropSize) / 2);
@@ -807,7 +813,6 @@ def render_qr_scanner_widget(
                                         canvas.height = out;
                                         ctx.drawImage(videoEl, sx, sy, cropSize, cropSize, 0, 0, out, out);
                                     }} else {{
-                                        // Full frame
                                         const scale = Math.min(1, 1024 / Math.max(vw, vh));
                                         canvas.width = Math.round(vw * scale);
                                         canvas.height = Math.round(vh * scale);
@@ -826,7 +831,7 @@ def render_qr_scanner_widget(
                         }}
                         rafId = win.requestAnimationFrame(tick);
                     }} catch (err) {{
-                        statusEl.textContent = 'Camera permission blocked or unavailable. Use "Snap Photo / Upload QR Image" below.';
+                        statusEl.textContent = 'Camera unavailable. Use Snap Photo or Upload QR below.';
                     }}
                 }})();
             }}
@@ -844,13 +849,19 @@ def render_qr_scanner_widget(
     )
 
 
-def render_pay_handoff_banner(app_name: str, amount: float, parsed_qr: dict | None, note: str = "", paid_by_cc: bool = False):
+def render_pay_handoff_banner(
+    app_name: str,
+    amount: float,
+    parsed_qr: dict | None,
+    note: str = "",
+    paid_by_cc: bool = False,
+    home_btn_key: str = "m_sp_go_home",
+):
     """
     Renders the post-log UPI handoff card:
     - Copies the amount to clipboard automatically
-    - Detects iOS vs Android in browser to choose the best URI (ios_url vs Android intent://)
-    - Attempts automatic redirect on Android, and provides an immediate 1-tap launch pill for iOS Safari PWA
-    - Shows an optional fallback System UPI link if the chosen app rejects parameters
+    - Launches the chosen UPI app (CRED / Paytm / GPay / PhonePe / BHIM)
+    - Automatically navigates WealthFlow back to Home once the UPI app opens (or on return)
     """
     urls = build_upi_urls(app_name, parsed_qr, amount, note)
     sym = st.session_state.get("sym", "₹")
@@ -865,6 +876,7 @@ def render_pay_handoff_banner(app_name: str, amount: float, parsed_qr: dict | No
     android_url_json = json.dumps(urls["android_url"])
     generic_url_json = json.dumps(urls["generic_upi_url"])
     amt_copy_json = json.dumps(urls["amt_copy"])
+    home_key_json = json.dumps(home_btn_key)
     app_label_esc = html.escape(urls["app_label"])
     merchant_esc = html.escape(merchant_label)
     amt_esc = html.escape(amt_display)
@@ -964,6 +976,7 @@ def render_pay_handoff_banner(app_name: str, amount: float, parsed_qr: dict | No
             const androidUrl = {android_url_json};
             const genericUrl = {generic_url_json};
             const amtCopy = {amt_copy_json};
+            const homeBtnKey = {home_key_json};
 
             const ua = navigator.userAgent || '';
             const isAndroid = /Android/i.test(ua);
@@ -983,12 +996,53 @@ def render_pay_handoff_banner(app_name: str, amount: float, parsed_qr: dict | No
             }}
             copyAmt();
 
+            let launched = false;
+            let homeTriggered = false;
+            function triggerReturnHome() {{
+                if (homeTriggered) return;
+                homeTriggered = true;
+                try {{
+                    const doc = window.parent ? window.parent.document : document;
+                    const homeWrap = doc.querySelector('.st-key-' + homeBtnKey);
+                    const homeBtn = homeWrap ? homeWrap.querySelector('button') : null;
+                    if (homeBtn) {{
+                        homeBtn.click();
+                        return;
+                    }}
+                    const dockWrap = doc.querySelector('.st-key-m_dock_home');
+                    const dockBtn = dockWrap ? dockWrap.querySelector('button') : null;
+                    if (dockBtn) dockBtn.click();
+                }} catch (e) {{}}
+            }}
+
+            function scheduleHomeReturn() {{
+                launched = true;
+                setTimeout(triggerReturnHome, 550);
+            }}
+
+            try {{
+                const pDoc = window.parent ? window.parent.document : document;
+                const pWin = window.parent || window;
+                pDoc.addEventListener('visibilitychange', function() {{
+                    if (launched && !pDoc.hidden) triggerReturnHome();
+                }});
+                pWin.addEventListener('focus', function() {{
+                    if (launched) triggerReturnHome();
+                }});
+            }} catch (e) {{}}
+
             launchBtn.addEventListener('click', function() {{
                 copyAmt();
+                scheduleHomeReturn();
+            }});
+            altBtn.addEventListener('click', function() {{
+                copyAmt();
+                scheduleHomeReturn();
             }});
 
             if (isAndroid) {{
                 setTimeout(function() {{
+                    scheduleHomeReturn();
                     try {{
                         window.top.location.href = targetUrl;
                     }} catch (e) {{

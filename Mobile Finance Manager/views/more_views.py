@@ -454,6 +454,19 @@ def render_settings_mobile(uid: str, user_data: dict, finance_service, auth_serv
         st.session_state["m_toast"] = f"Default Paid by CC {'enabled' if new_def_cc_pay else 'disabled'}."
         st.rerun()
 
+    with st.expander("iPhone Home Screen Scan Widget / Shortcut", icon=":material/qr_code_scanner:"):
+        scan_url = "https://wealthflow-mobile-ganeshnarapareddy.streamlit.app/?action=scan"
+        st.caption("Use this link to launch directly into the QR Scanner (skipping Home):")
+        st.code(scan_url, language=None)
+        st.markdown(
+            "**Option A — iPhone Home Screen Widget (via Apple Shortcuts):**\n"
+            "1. Open Apple **Shortcuts** app → tap **+** → **Add Action** → search **Open URLs**.\n"
+            "2. Paste the URL above and name the shortcut **Scan & Pay**.\n"
+            "3. Long-press your iPhone Home Screen → **+** → add the **Shortcuts** widget (or tap Share → **Add to Home Screen**).\n\n"
+            "**Option B — Dedicated Home Screen Icon:**\n"
+            "Open the URL above in Safari, then tap **Share → Add to Home Screen**."
+        )
+
     m_section("Categories")
     cat_view = st.segmented_control(
         "Category Filter",

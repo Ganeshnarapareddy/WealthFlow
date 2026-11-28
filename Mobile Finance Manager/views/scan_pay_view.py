@@ -61,6 +61,7 @@ def render_scan_pay_view(uid: str, finance_service):
                 parsed_qr=handoff.get("parsed_qr"),
                 note=handoff.get("note", ""),
                 paid_by_cc=handoff.get("paid_by_cc", False),
+                home_btn_key="m_sp_go_home",
             )
 
             ac1, ac2 = st.columns(2)
@@ -69,12 +70,12 @@ def render_scan_pay_view(uid: str, finance_service):
                     restore_scan_pay_to_step2(uid, finance_service)
                     st.rerun()
             with ac2:
-                if st.button("Scan Another", type="primary", use_container_width=True, key="m_sp_again"):
+                if st.button("Done · Home", type="primary", use_container_width=True, key="m_sp_go_home"):
                     st.session_state.pop("m_sp_handoff", None)
                     st.session_state.pop("m_sp_parsed_qr", None)
                     st.session_state.pop("m_sp_draft", None)
-                    st.session_state["m_scan_auto_open"] = True
-                    st.rerun(scope="fragment")
+                    st.session_state["m_page"] = "Home"
+                    st.rerun()
             return
 
         # Step 1: Capture QR and persist into non-widget session_state['m_sp_parsed_qr']
