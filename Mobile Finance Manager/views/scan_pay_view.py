@@ -12,12 +12,36 @@ from components.upi_bridge import (
 )
 
 
+def restore_scan_pay_to_step2(uid: str, finance_service):
+    """Revert the unconfirmed Step 3 handoff back to Step 2 without leaving a duplicate ledger row."""
+    handoff = st.session_state.pop("m_sp_handoff", None)
+    if not handoff:
+        return False
+    txn_id = handoff.get("txn_id")
+    if txn_id:
+        try:
+            finance_service.delete_transaction(txn_id, uid)
+        except Exception:
+            pass
+    st.session_state["m_sp_parsed_qr"] = handoff.get("parsed_qr")
+    st.session_state["m_sp_draft"] = {
+        "amount": handoff.get("amount"),
+        "cat_label": handoff.get("cat_label"),
+        "raw_desc": handoff.get("raw_desc", ""),
+        "paid_by_cc": handoff.get("paid_by_cc", False),
+        "app": handoff.get("app", "CRED"),
+    }
+    st.session_state["m_sp_v"] = st.session_state.get("m_sp_v", 0) + 1
+    return True
+
+
 def render_scan_pay_view(uid: str, finance_service):
     """
     Dedicated floating-FAB Scan & Pay workflow:
     Step 1: Press / Scan Merchant UPI QR (or enter UPI ID)
     Step 2: Enter Amount, Category, Description, Paid by CC, and UPI App -> Proceed
-    Step 3: Logs expense in WealthFlow immediately & hands off to CRED / Paytm / GPay / PhonePe / BHIM
+    Step 3: Expense is already logged in Ledger & hands off to Paytm / PhonePe / GPay / CRED / BHIM;
+            Back button returns to Step 2 with all entered details intact (and reverts the temporary row).
     """
     @st.fragment
     def _scan_pay_frag():
@@ -27,10 +51,10 @@ def render_scan_pay_view(uid: str, finance_service):
         v = st.session_state["m_sp_v"]
         auto_open = bool(st.session_state.pop("m_scan_auto_open", False))
 
-        # Step 3: Post-Proceed Payment Handoff (persisted in non-widget session_state)
+        # Step 3: Post-Proceed Payment Handoff (expense is ALREADY logged in Ledger!)
         handoff = st.session_state.get("m_sp_handoff")
         if handoff:
-            st.success(f"Expense logged: {fmt(handoff['amount'])}")
+            st.success(f"Logged to Ledger: {fmt(handoff['amount'])} · Ready to open {UPI_APPS.get(handoff['app'], {}).get('label', handoff['app'])}")
             render_pay_handoff_banner(
                 app_name=handoff["app"],
                 amount=handoff["amount"],
@@ -38,34 +62,30 @@ def render_scan_pay_view(uid: str, finance_service):
                 note=handoff.get("note", ""),
                 paid_by_cc=handoff.get("paid_by_cc", False),
             )
+            if handoff.get("app") == "CRED":
+                st.caption("Note: CRED on iPhone opens without auto-filling the amount — the amount is copied to your clipboard, or tap Back to pick Paytm / PhonePe / Google Pay.")
+
             ac1, ac2 = st.columns(2)
             with ac1:
-                if st.button("Scan Another QR", type="primary", use_container_width=True, key="m_sp_again"):
+                if st.button("← Back", type="secondary", use_container_width=True, key="m_sp_back_edit"):
+                    restore_scan_pay_to_step2(uid, finance_service)
+                    st.rerun()
+            with ac2:
+                if st.button("Scan Another", type="primary", use_container_width=True, key="m_sp_again"):
                     st.session_state.pop("m_sp_handoff", None)
                     st.session_state.pop("m_sp_parsed_qr", None)
+                    st.session_state.pop("m_sp_draft", None)
                     st.session_state["m_scan_auto_open"] = True
                     st.rerun(scope="fragment")
-            with ac2:
-                if st.button("Done · Back Home", type="secondary", use_container_width=True, key="m_sp_home"):
-                    st.session_state.pop("m_sp_handoff", None)
-                    st.session_state.pop("m_sp_parsed_qr", None)
-                    st.session_state["m_page"] = st.session_state.get("m_scan_return_page", "Home")
-                    st.rerun()
             return
 
         # Step 1: Capture QR and persist into non-widget session_state['m_sp_parsed_qr']
-        # (Widget keys are garbage-collected by Streamlit once unmounted on Step 2.)
         parsed_qr = st.session_state.get("m_sp_parsed_qr")
         if not parsed_qr:
             raw_qr = st.session_state.get(f"m_sp_upi_{v}", "")
             candidate_qr = parse_upi_qr(raw_qr)
             if candidate_qr:
                 st.session_state["m_sp_parsed_qr"] = candidate_qr
-                if candidate_qr.get("am") and st.session_state.get(f"m_sp_amt_{v}") is None:
-                    try:
-                        st.session_state[f"m_sp_amt_{v}"] = float(candidate_qr["am"])
-                    except (TypeError, ValueError):
-                        pass
                 parsed_qr = candidate_qr
 
         if not parsed_qr:
@@ -86,11 +106,6 @@ def render_scan_pay_view(uid: str, finance_service):
                     cand2 = parse_upi_qr(upi_manual)
                     if cand2:
                         st.session_state["m_sp_parsed_qr"] = cand2
-                        if cand2.get("am") and st.session_state.get(f"m_sp_amt_{v}") is None:
-                            try:
-                                st.session_state[f"m_sp_amt_{v}"] = float(cand2["am"])
-                            except (TypeError, ValueError):
-                                pass
                         st.rerun(scope="fragment")
                     else:
                         st.warning("Could not read a valid UPI ID from that input. Expected a UPI QR or name@bank.")
@@ -116,6 +131,7 @@ def render_scan_pay_view(uid: str, finance_service):
         with c_chg:
             if st.button("Change QR", key=f"m_sp_reset_qr_{v}", use_container_width=True):
                 st.session_state.pop("m_sp_parsed_qr", None)
+                st.session_state.pop("m_sp_draft", None)
                 st.session_state["m_sp_v"] = v + 1
                 st.session_state["m_scan_auto_open"] = True
                 st.rerun(scope="fragment")
@@ -123,37 +139,51 @@ def render_scan_pay_view(uid: str, finance_service):
         all_cats = finance_service.get_categories(uid)
         filtered = all_cats[all_cats["type"] == "Expense"] if not all_cats.empty else all_cats
         cat_opts = {f"{r['icon']} {r['name']}": r["id"] for _, r in filtered.iterrows()} if not filtered.empty else {}
+        cat_keys = list(cat_opts.keys()) if cat_opts else ["-"]
 
-        saved_app = finance_service.get_setting("preferred_upi_app", "CRED", uid)
+        saved_app = finance_service.get_setting("preferred_upi_app", "Paytm", uid)
         if saved_app not in PAY_ACTIVE_APP_OPTIONS:
-            saved_app = "CRED"
+            saved_app = "Paytm"
         default_cc = finance_service.get_setting("preferred_upi_default_cc", "False", uid) == "True"
+
+        draft = st.session_state.get("m_sp_draft") or {}
+        amt_default = draft.get("amount")
+        if amt_default is None and parsed_qr.get("am"):
+            try:
+                amt_default = float(parsed_qr["am"])
+            except (TypeError, ValueError):
+                amt_default = None
+        cat_idx = cat_keys.index(draft["cat_label"]) if draft.get("cat_label") in cat_keys else 0
+        desc_default = draft.get("raw_desc", "")
+        cc_default = bool(draft.get("paid_by_cc", default_cc))
+        app_default = draft.get("app") if draft.get("app") in PAY_ACTIVE_APP_OPTIONS else saved_app
 
         with st.form(f"m_sp_details_form_{v}"):
             amt = st.number_input(
                 f"Amount ({st.session_state.get('sym', '₹')}) *",
                 min_value=0.01,
                 step=1.0,
-                value=None,
+                value=float(amt_default) if amt_default else None,
                 placeholder="0.00",
                 key=f"m_sp_amt_{v}",
             )
             cat_sel = st.selectbox(
                 "Category *",
-                list(cat_opts.keys()) if cat_opts else ["-"],
-                index=0,
+                cat_keys,
+                index=cat_idx,
                 key=f"m_sp_cat_{v}",
             )
             desc = st.text_input(
                 "Description",
+                value=desc_default,
                 placeholder=f"Optional (default: {pn_txt})",
                 key=f"m_sp_desc_{v}",
             )
-            paid_by_cc = st.checkbox("Paid by CC", value=default_cc, key=f"m_sp_cc_{v}")
+            paid_by_cc = st.checkbox("Paid by CC", value=cc_default, key=f"m_sp_cc_{v}")
             pay_app = st.selectbox(
                 "Open in UPI App",
                 PAY_ACTIVE_APP_OPTIONS,
-                index=PAY_ACTIVE_APP_OPTIONS.index(saved_app),
+                index=PAY_ACTIVE_APP_OPTIONS.index(app_default),
                 format_func=lambda k: UPI_APPS[k]["label"],
                 key=f"m_sp_app_{v}",
             )
@@ -164,8 +194,9 @@ def render_scan_pay_view(uid: str, finance_service):
                 elif cat_sel == "-":
                     st.error("Please select a category.")
                 else:
-                    desc_final = desc.strip() or pn_txt or pa_txt
-                    finance_service.add_transaction(
+                    raw_desc = desc.strip()
+                    desc_final = raw_desc or pn_txt or pa_txt
+                    txn_id = finance_service.add_transaction(
                         float(amt),
                         cat_opts[cat_sel],
                         desc_final,
@@ -175,12 +206,16 @@ def render_scan_pay_view(uid: str, finance_service):
                         paid_by_cc=paid_by_cc,
                     )
                     st.session_state.pop("m_sp_parsed_qr", None)
+                    st.session_state.pop("m_sp_draft", None)
                     st.session_state["m_sp_v"] = v + 1
                     st.session_state["m_sp_handoff"] = {
+                        "txn_id": txn_id,
                         "app": pay_app,
                         "amount": float(amt),
                         "parsed_qr": parsed_qr,
                         "note": desc_final,
+                        "raw_desc": raw_desc,
+                        "cat_label": cat_sel,
                         "paid_by_cc": paid_by_cc,
                     }
                     st.rerun(scope="fragment")

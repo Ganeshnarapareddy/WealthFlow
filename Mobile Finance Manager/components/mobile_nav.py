@@ -41,10 +41,16 @@ def render_mobile_topbar(user_data: dict, logo_b64: str | None, finance_service,
         c_back, c_title, c_cur, c_prof = st.columns([0.13, 0.45, 0.27, 0.15], vertical_alignment="center")
         with c_back:
             back_target = st.session_state.get("m_scan_return_page", "Home") if cur_page == "ScanPay" else "More"
-            if st.button("", icon=":material/arrow_back:", key="m_top_back", help=f"Back to {back_target}"):
+            if st.button("", icon=":material/arrow_back:", key="m_top_back", help="Back"):
                 if cur_page == "ScanPay":
-                    st.session_state.pop("m_sp_handoff", None)
-                    st.session_state.pop("m_sp_parsed_qr", None)
+                    if st.session_state.get("m_sp_handoff"):
+                        from views.scan_pay_view import restore_scan_pay_to_step2
+                        restore_scan_pay_to_step2(user_data["id"], finance_service)
+                        st.rerun()
+                    elif st.session_state.get("m_sp_parsed_qr"):
+                        st.session_state.pop("m_sp_parsed_qr", None)
+                        st.session_state.pop("m_sp_draft", None)
+                        st.rerun()
                 st.session_state["m_page"] = back_target
                 st.rerun()
         with c_title:
@@ -144,6 +150,7 @@ def render_qr_fab():
     if st.button("", icon=":material/qr_code_scanner:", key="m_qr_fab_btn", type="primary", help="Scan QR & Pay"):
         st.session_state.pop("m_sp_handoff", None)
         st.session_state.pop("m_sp_parsed_qr", None)
+        st.session_state.pop("m_sp_draft", None)
         st.session_state["m_scan_return_page"] = st.session_state.get("m_page", "Home")
         st.session_state["m_scan_auto_open"] = True
         st.session_state["m_page"] = "ScanPay"
