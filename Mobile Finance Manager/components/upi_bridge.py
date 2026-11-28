@@ -338,49 +338,87 @@ def render_qr_scanner_widget(
                 return true;
             }}
 
-            function buildContrastImageData(imgData) {{
+            function buildContrastImageData(imgData, invert) {{
                 const w = imgData.width;
                 const h = imgData.height;
                 const src = imgData.data;
                 const out = new Uint8ClampedArray(src.length);
                 const len = w * h;
                 const luma = new Uint8Array(len);
-                let minV = 255, maxV = 0;
+                const hist = new Uint32Array(256);
 
                 for (let i = 0, j = 0; i < len; i++, j += 4) {{
                     const y = (src[j] * 77 + src[j + 1] * 150 + src[j + 2] * 29) >> 8;
                     luma[i] = y;
-                    if (y < minV) minV = y;
-                    if (y > maxV) maxV = y;
+                    hist[y]++;
+                }}
+                const lowCut = Math.floor(len * 0.05);
+                const highCut = Math.floor(len * 0.08);
+                let acc = 0, minV = 0, maxV = 255;
+                for (let k = 0; k < 256; k++) {{
+                    acc += hist[k];
+                    if (acc >= lowCut) {{ minV = k; break; }}
+                }}
+                acc = 0;
+                for (let k = 255; k >= 0; k--) {{
+                    acc += hist[k];
+                    if (acc >= highCut) {{ maxV = k; break; }}
                 }}
                 const span = Math.max(16, maxV - minV);
                 for (let i = 0, j = 0; i < len; i++, j += 4) {{
                     let v = ((luma[i] - minV) * 255) / span;
                     if (v < 0) v = 0;
                     if (v > 255) v = 255;
+                    if (invert) v = 255 - v;
                     out[j] = out[j + 1] = out[j + 2] = v;
                     out[j + 3] = 255;
                 }}
                 return {{ data: out, width: w, height: h }};
             }}
 
-            function tryZXingCanvas(ZXingLib, zxingReader, zxingHints, imgData) {{
-                if (!ZXingLib || !zxingReader) return null;
+            function tryZXingCanvas(ZXingLib, zxingReader, zxingHints, canvasEl, imgData) {{
+                if (!ZXingLib || !zxingReader) return {{ text: null, err: null }};
                 try {{
-                    const w = imgData.width;
-                    const h = imgData.height;
-                    const d = imgData.data;
-                    const len = w * h;
-                    const luma = new Uint8ClampedArray(len);
-                    for (let i = 0, j = 0; i < len; i++, j += 4) {{
-                        luma[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+                    let src = null;
+                    if (typeof ZXingLib.HTMLCanvasElementLuminanceSource === 'function') {{
+                        src = new ZXingLib.HTMLCanvasElementLuminanceSource(canvasEl);
+                    }} else if (typeof ZXingLib.RGBLuminanceSource === 'function') {{
+                        const w = imgData.width;
+                        const h = imgData.height;
+                        const d = imgData.data;
+                        const ints = new Int32Array(w * h);
+                        for (let i = 0, j = 0; i < ints.length; i++, j += 4) {{
+                            ints[i] = (d[j] << 16) | (d[j + 1] << 8) | d[j + 2];
+                        }}
+                        src = new ZXingLib.RGBLuminanceSource(ints, w, h);
                     }}
-                    const src = new ZXingLib.RGBLuminanceSource(luma, w, h);
-                    const bmp = new ZXingLib.BinaryBitmap(new ZXingLib.HybridBinarizer(src));
-                    const res = zxingReader.decode(bmp, zxingHints);
-                    if (res && res.getText) return res.getText();
-                }} catch (e) {{}}
-                return null;
+                    if (!src) return {{ text: null, err: 'no-src' }};
+
+                    const candidates = [src];
+                    if (typeof src.invert === 'function') {{
+                        candidates.push(src.invert());
+                    }}
+
+                    for (const lum of candidates) {{
+                        if (typeof ZXingLib.HybridBinarizer === 'function') {{
+                            try {{
+                                const bmp = new ZXingLib.BinaryBitmap(new ZXingLib.HybridBinarizer(lum));
+                                const res = zxingReader.decode(bmp, zxingHints);
+                                if (res && res.getText) return {{ text: res.getText(), err: null }};
+                            }} catch (e) {{}}
+                        }}
+                        if (typeof ZXingLib.GlobalHistogramBinarizer === 'function') {{
+                            try {{
+                                const bmp2 = new ZXingLib.BinaryBitmap(new ZXingLib.GlobalHistogramBinarizer(lum));
+                                const res2 = zxingReader.decode(bmp2, zxingHints);
+                                if (res2 && res2.getText) return {{ text: res2.getText(), err: null }};
+                            }} catch (e) {{}}
+                        }}
+                    }}
+                    return {{ text: null, err: null }};
+                }} catch (e) {{
+                    return {{ text: null, err: String(e && e.message ? e.message : e) }};
+                }}
             }}
 
             function openScannerOverlay() {{
@@ -481,8 +519,8 @@ def render_qr_scanner_widget(
                     if (canvas.width <= 0 || canvas.height <= 0) return null;
                     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-                    const zx = tryZXingCanvas(ZXingLib, zxingReader, zxingHints, imgData);
-                    if (zx) return zx;
+                    const zx = tryZXingCanvas(ZXingLib, zxingReader, zxingHints, canvas, imgData);
+                    if (zx && zx.text) return zx.text;
 
                     if (typeof jsQRfn === 'function') {{
                         try {{
@@ -491,11 +529,13 @@ def render_qr_scanner_widget(
                         }} catch (e) {{}}
 
                         if (useContrast) {{
-                            try {{
-                                const norm = buildContrastImageData(imgData);
-                                const code2 = jsQRfn(norm.data, norm.width, norm.height, {{ inversionAttempts: 'attemptBoth' }});
-                                if (code2 && code2.data) return code2.data;
-                            }} catch (e) {{}}
+                            for (const inv of [false, true]) {{
+                                try {{
+                                    const norm = buildContrastImageData(imgData, inv);
+                                    const code2 = jsQRfn(norm.data, norm.width, norm.height, {{ inversionAttempts: 'dontInvert' }});
+                                    if (code2 && code2.data) return code2.data;
+                                }} catch (e) {{}}
+                            }}
                         }}
                     }}
                     return null;
@@ -680,7 +720,7 @@ def render_qr_scanner_widget(
                                         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
                                     }}
                                     const res = await decodeCanvasAllEngines(
-                                        decoders, zxingReader, zxingHints, (frameCount % 2 === 0)
+                                        decoders, zxingReader, zxingHints, true
                                     );
                                     if (res) {{
                                         handleDecoded(res);
